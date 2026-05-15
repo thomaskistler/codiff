@@ -31,9 +31,10 @@ const createWindow = (repositoryPath) => {
     width: Math.max(1120, Math.floor(width * 0.86)),
   });
 
-  windowRepositories.set(window.webContents.id, repositoryPath);
+  const webContentsId = window.webContents.id;
+  windowRepositories.set(webContentsId, repositoryPath);
   window.once('ready-to-show', () => window.show());
-  window.on('closed', () => windowRepositories.delete(window.webContents.id));
+  window.on('closed', () => windowRepositories.delete(webContentsId));
 
   const rendererURL = process.env.ELECTRON_RENDERER_URL;
   if (rendererURL) {

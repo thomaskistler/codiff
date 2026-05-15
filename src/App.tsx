@@ -72,14 +72,13 @@ const writeViewed = (root: string, viewed: Record<string, string>) => {
 function Sidebar({
   files,
   onSelectPath,
-  root,
   selectedPath,
 }: {
   files: ReadonlyArray<ChangedFile>;
   onSelectPath: (path: string) => void;
-  root: string;
   selectedPath: string | null;
 }) {
+  const suppressSelectionChange = useRef(false);
   const paths = useMemo(() => files.map((file) => file.path), [files]);
   const status = useMemo(
     () =>
@@ -96,7 +95,11 @@ function Sidebar({
     initialSelectedPaths: selectedPath ? [selectedPath] : [],
     itemHeight: 30,
     onSelectionChange: (paths) => {
-      const path = paths[0];
+      if (suppressSelectionChange.current) {
+        return;
+      }
+
+      const path = paths.at(-1);
       if (path) {
         onSelectPath(path);
       }
@@ -115,20 +118,27 @@ function Sidebar({
     `,
   });
 
-  return (
-    <FileTree
-      className="file-tree"
-      header={
-        <div className="sidebar-header">
-          <div className="sidebar-path" title={root}>
-            {compactPath(root)}
-          </div>
-          <div className="sidebar-title">Changed Files</div>
-        </div>
-      }
-      model={model}
-    />
-  );
+  useEffect(() => {
+    if (!selectedPath) {
+      return;
+    }
+
+    const selectedPaths = model.getSelectedPaths();
+    if (selectedPaths.length === 1 && selectedPaths[0] === selectedPath) {
+      return;
+    }
+
+    suppressSelectionChange.current = true;
+    for (const path of selectedPaths) {
+      model.getItem(path)?.deselect();
+    }
+    model.getItem(selectedPath)?.select();
+    window.setTimeout(() => {
+      suppressSelectionChange.current = false;
+    }, 0);
+  }, [model, selectedPath]);
+
+  return <FileTree className="file-tree" model={model} />;
 }
 
 function DiffFile({
@@ -226,6 +236,9 @@ export default function App() {
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
   const [viewed, setViewed] = useState<Record<string, string>>({});
   const fileRefs = useRef(new Map<string, HTMLElement>());
+  const programmaticScrollPathRef = useRef<string | null>(null);
+  const programmaticScrollTimerRef = useRef<number | null>(null);
+  const reviewRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
     let canceled = false;
@@ -253,15 +266,74 @@ export default function App() {
     };
   }, []);
 
+  useEffect(
+    () => () => {
+      if (programmaticScrollTimerRef.current != null) {
+        window.clearTimeout(programmaticScrollTimerRef.current);
+      }
+    },
+    [],
+  );
+
   const selectPath = useCallback((path: string) => {
     setSelectedPath(path);
+    programmaticScrollPathRef.current = path;
+    if (programmaticScrollTimerRef.current != null) {
+      window.clearTimeout(programmaticScrollTimerRef.current);
+    }
+
     requestAnimationFrame(() => {
       fileRefs.current.get(path)?.scrollIntoView({
         behavior: 'smooth',
         block: 'start',
       });
+      programmaticScrollTimerRef.current = window.setTimeout(() => {
+        programmaticScrollPathRef.current = null;
+      }, 1200);
     });
   }, []);
+
+  const updateSelectedPathFromScroll = useCallback(() => {
+    const review = reviewRef.current;
+    if (!review || !state?.files.length) {
+      return;
+    }
+
+    const reviewTop = review.getBoundingClientRect().top;
+    const programmaticScrollPath = programmaticScrollPathRef.current;
+    if (programmaticScrollPath) {
+      const target = fileRefs.current.get(programmaticScrollPath);
+      if (!target || Math.abs(target.getBoundingClientRect().top - reviewTop) > 16) {
+        return;
+      }
+
+      programmaticScrollPathRef.current = null;
+      if (programmaticScrollTimerRef.current != null) {
+        window.clearTimeout(programmaticScrollTimerRef.current);
+        programmaticScrollTimerRef.current = null;
+      }
+    }
+
+    let nextPath = state.files[0]?.path ?? null;
+    let nextDistance = Number.NEGATIVE_INFINITY;
+
+    for (const file of state.files) {
+      const element = fileRefs.current.get(file.path);
+      if (!element) {
+        continue;
+      }
+
+      const distance = element.getBoundingClientRect().top - reviewTop - 12;
+      if (distance <= 0 && distance > nextDistance) {
+        nextDistance = distance;
+        nextPath = file.path;
+      }
+    }
+
+    if (nextPath) {
+      setSelectedPath((current) => (current === nextPath ? current : nextPath));
+    }
+  }, [state]);
 
   const toggleViewed = useCallback(
     (file: ChangedFile, isViewed: boolean) => {
@@ -306,15 +378,17 @@ export default function App() {
   return (
     <div className="app-shell">
       <aside className="sidebar squircle">
-        <div className="window-drag" />
-        <Sidebar
-          files={state.files}
-          onSelectPath={selectPath}
-          root={state.root}
-          selectedPath={selectedPath}
-        />
+        <div className="sidebar-header">
+          <div className="sidebar-path-row">
+            <div className="sidebar-path" title={state.root}>
+              {compactPath(state.root)}
+            </div>
+          </div>
+          <div className="sidebar-title">Changed Files</div>
+        </div>
+        <Sidebar files={state.files} onSelectPath={selectPath} selectedPath={selectedPath} />
       </aside>
-      <main className="review">
+      <main className="review" onScroll={updateSelectedPathFromScroll} ref={reviewRef}>
         {state.files.length === 0 ? (
           <div className="empty-state">
             <div className="empty-panel squircle">
