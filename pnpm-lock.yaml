@@ -24,6 +24,9 @@ importers:
       '@pierre/trees':
         specifier: 1.0.0-beta.3
         version: 1.0.0-beta.3(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
+      electron:
+        specifier: ^42.0.1
+        version: 42.0.1
       react:
         specifier: ^19.2.6
         version: 19.2.6
@@ -64,9 +67,6 @@ importers:
       babel-plugin-react-compiler:
         specifier: ^1.0.0
         version: 1.0.0
-      electron:
-        specifier: ^42.0.1
-        version: 42.0.1
       eslint-plugin-no-only-tests:
         specifier: ^3.4.0
         version: 3.4.0
