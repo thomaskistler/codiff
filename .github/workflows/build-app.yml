@@ -15,6 +15,7 @@ on:
       - 'vite.config.*'
 
 env:
+  ELECTRON_CACHE: ${{ github.workspace }}/.cache/electron
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
@@ -50,6 +51,14 @@ jobs:
         with:
           run_install: false
 
+      - name: Cache Electron Downloads
+        uses: actions/cache@v4
+        with:
+          path: ./.cache/electron
+          key: ${{ runner.os }}-electron-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-electron-
+
       - name: Install Node Dependencies
         run: pnpm install
 
@@ -58,15 +67,36 @@ jobs:
 
       - name: Build Native Apps
         run: |
+          retry() {
+            attempts=3
+            delay=10
+            count=1
+
+            until "$@"; do
+              exit_code=$?
+
+              if [ "$count" -ge "$attempts" ]; then
+                return "$exit_code"
+              fi
+
+              echo "Command failed with exit code ${exit_code}. Retrying in ${delay}s..."
+              sleep "$delay"
+              count=$((count + 1))
+              delay=$((delay * 2))
+            done
+          }
+
           rm -rf artifacts/native-apps
           mkdir -p artifacts/native-apps
 
-          pnpm exec electron-forge make --platform=linux --arch=x64
+          retry pnpm exec electron-forge make --platform=linux --arch=x64
           find out -maxdepth 5 -type f | sort
           cp -R out/make artifacts/native-apps/linux-make
-          tar -czf artifacts/native-apps/codiff-linux-x64.tar.gz -C out codiff-linux-x64
+          linux_app_dir=$(find out -maxdepth 1 -type d -name '*-linux-x64' | head -n 1)
+          test -n "$linux_app_dir"
+          tar -czf artifacts/native-apps/codiff-linux-x64.tar.gz -C out "$(basename "$linux_app_dir")"
 
-          pnpm exec electron-forge make --platform=win32 --arch=x64
+          retry pnpm exec electron-forge make --platform=win32 --arch=x64
           find out -maxdepth 5 -type f | sort
           cp -R out/make artifacts/native-apps/windows-make
 
