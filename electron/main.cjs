@@ -2,6 +2,7 @@ const { existsSync, readFileSync, writeFileSync } = require('node:fs');
 const { dirname, join, relative, resolve } = require('node:path');
 const { pathToFileURL } = require('node:url');
 const { app, BrowserWindow, ipcMain, Menu, nativeTheme, screen, shell } = require('electron');
+const squirrelStartup = require('electron-squirrel-startup');
 const { listRepositoryHistory, readRepositoryState } = require('./git-state.cjs');
 
 const root = dirname(__dirname);
@@ -10,7 +11,13 @@ let preferences = {
   showWhitespace: false,
 };
 
-const getLaunchPath = () => resolve(process.env.CODIFF_REPOSITORY_PATH || process.cwd());
+const getCommandLineRepositoryPath = () => {
+  const args = process.argv.slice(process.defaultApp ? 2 : 1);
+  return args.find((arg) => arg && !arg.startsWith('-'));
+};
+
+const getLaunchPath = () =>
+  resolve(process.env.CODIFF_REPOSITORY_PATH || getCommandLineRepositoryPath() || process.cwd());
 
 const getPreferencesPath = () => join(app.getPath('userData'), 'preferences.json');
 
@@ -113,9 +120,9 @@ const createWindow = (repositoryPath) => {
   }
 };
 
-const lock = app.requestSingleInstanceLock({ repositoryPath: getLaunchPath() });
+const lock = !squirrelStartup && app.requestSingleInstanceLock({ repositoryPath: getLaunchPath() });
 
-if (!lock) {
+if (squirrelStartup || !lock) {
   app.quit();
 } else {
   app.setName('Codiff');

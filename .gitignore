@@ -3,6 +3,7 @@
 /node_modules/
 coverage/
 dist/
+out/
 source_strings.json
 src/translations
 tsconfig.tsbuildinfo
