@@ -30,10 +30,12 @@ const {
   readRepositoryState,
   validateRepositoryPath,
 } = require('./git-state.cjs');
+const { readWalkthrough } = require('./walkthrough.cjs');
 
 const root = dirname(__dirname);
 const repositoryWatchers = new Map();
 const windowRepositories = new Map();
+const windowLaunchOptions = new Map();
 let preferences = {
   showWhitespace: false,
 };
@@ -43,8 +45,20 @@ const getCommandLineRepositoryPath = (commandLine = process.argv) => {
   return args.find((arg) => arg && !arg.startsWith('-'));
 };
 
+const getCommandLineLaunchOptions = (commandLine = process.argv) => {
+  const args = commandLine.slice(process.defaultApp ? 2 : 1);
+  return {
+    walkthrough:
+      process.env.CODIFF_WALKTHROUGH === '1' ||
+      args.includes('--walkthrough') ||
+      args.includes('-w'),
+  };
+};
+
 const getLaunchPath = () =>
   resolve(process.env.CODIFF_REPOSITORY_PATH || getCommandLineRepositoryPath() || process.cwd());
+
+const getLaunchOptions = () => getCommandLineLaunchOptions();
 
 const getPreferencesPath = () => join(app.getPath('userData'), 'preferences.json');
 
@@ -138,7 +152,7 @@ const openRepositoryFolder = async (browserWindow) => {
   });
 
   if (!result.canceled && result.filePaths[0]) {
-    createWindow(result.filePaths[0]);
+    createWindow(result.filePaths[0], { walkthrough: false });
   }
 };
 
@@ -279,7 +293,7 @@ const buildApplicationMenu = () =>
     },
   ]);
 
-const createWindow = (repositoryPath) => {
+const createWindow = (repositoryPath, launchOptions = { walkthrough: false }) => {
   const display = screen.getPrimaryDisplay();
   const { height, width } = display.workAreaSize;
   const window = new BrowserWindow({
@@ -303,6 +317,7 @@ const createWindow = (repositoryPath) => {
 
   const webContentsId = window.webContents.id;
   windowRepositories.set(webContentsId, repositoryPath);
+  windowLaunchOptions.set(webContentsId, launchOptions);
   startRepositoryWatcher(window, repositoryPath);
   window.once('ready-to-show', () => window.show());
   window.on('closed', () => {
@@ -312,6 +327,7 @@ const createWindow = (repositoryPath) => {
     }
     repositoryWatchers.delete(webContentsId);
     windowRepositories.delete(webContentsId);
+    windowLaunchOptions.delete(webContentsId);
   });
 
   const rendererURL = process.env.ELECTRON_RENDERER_URL;
@@ -322,7 +338,12 @@ const createWindow = (repositoryPath) => {
   }
 };
 
-const lock = !squirrelStartup && app.requestSingleInstanceLock({ repositoryPath: getLaunchPath() });
+const lock =
+  !squirrelStartup &&
+  app.requestSingleInstanceLock({
+    launchOptions: getLaunchOptions(),
+    repositoryPath: getLaunchPath(),
+  });
 
 if (squirrelStartup || !lock) {
   app.quit();
@@ -336,18 +357,19 @@ if (squirrelStartup || !lock) {
           getCommandLineRepositoryPath(commandLine) ||
           workingDirectory,
       ),
+      additionalData?.launchOptions || getCommandLineLaunchOptions(commandLine),
     );
   });
 
   app.on('ready', () => {
     preferences = readPreferences();
     Menu.setApplicationMenu(buildApplicationMenu());
-    createWindow(getLaunchPath());
+    createWindow(getLaunchPath(), getLaunchOptions());
   });
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
-      createWindow(getLaunchPath());
+      createWindow(getLaunchPath(), getLaunchOptions());
     }
   });
 
@@ -361,6 +383,20 @@ ipcMain.handle('codiff:getRepositoryState', async (event, source) => {
   const state = await readRepositoryState(repositoryPath, source);
   await resetRepositoryWatcher(event.sender.id, repositoryPath);
   return state;
+});
+
+ipcMain.handle(
+  'codiff:getLaunchOptions',
+  (event) =>
+    windowLaunchOptions.get(event.sender.id) || {
+      walkthrough: false,
+    },
+);
+
+ipcMain.handle('codiff:getWalkthrough', async (event, source) => {
+  const repositoryPath = windowRepositories.get(event.sender.id) || getLaunchPath();
+  const state = await readRepositoryState(repositoryPath, source);
+  return readWalkthrough(state);
 });
 
 ipcMain.handle('codiff:getDiffSectionContent', async (event, request) => {

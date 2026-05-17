@@ -22,11 +22,13 @@ import dunkelTheme from './themes/dunkel.json' with { type: 'json' };
 import lichtTheme from './themes/licht.json' with { type: 'json' };
 import type {
   ChangedFile,
+  CodiffLaunchOptions,
   CodiffPreferences,
   DiffSection,
   GitIdentity,
   GitFileStatus,
   RepositoryState,
+  Walkthrough,
 } from './types.ts';
 
 type ReviewAnnotationMetadata = {
@@ -58,6 +60,17 @@ type ReviewComment = {
   sectionId: string;
   side: 'additions' | 'deletions';
 };
+
+type SidebarMode = 'tree' | 'walkthrough';
+
+type WalkthroughNote = {
+  groupReason: string;
+  groupTitle: string;
+  order: number;
+  reason: string;
+};
+
+const emptyWalkthroughNotes = new Map<string, WalkthroughNote>();
 
 registerCustomTheme('Licht', async () => lichtTheme as never);
 registerCustomTheme('Dunkel', async () => dunkelTheme as never);
@@ -101,6 +114,10 @@ const codeViewItemMetrics = {
   diffHeaderHeight: 54,
 };
 
+const codeViewItemMetricsWithWalkthrough = {
+  diffHeaderHeight: 78,
+};
+
 const workerHighlighterOptions = {
   lineDiffType: 'char' as const,
   maxLineDiffLength: 2000,
@@ -131,6 +148,10 @@ const codeViewUnsafeCSS = `
     --diffs-line-height: 20px;
     --diffs-light-bg: #ffffff;
     --diffs-dark-bg: #1c1c1c;
+  }
+
+  [data-diff-type="split"][data-overflow="scroll"] {
+    grid-template-columns: minmax(0, 42fr) minmax(0, 58fr);
   }
 
   /* Align scrollbar with number column */
@@ -212,6 +233,61 @@ function compareTreePaths(leftPath: string, rightPath: string) {
 
 const sortFiles = (files: ReadonlyArray<ChangedFile>) =>
   [...files].sort((left, right) => compareTreePaths(left.path, right.path));
+
+const getWalkthroughNotes = (walkthrough: Walkthrough | null) => {
+  const notes = new Map<string, WalkthroughNote>();
+  if (!walkthrough) {
+    return notes;
+  }
+
+  let order = 0;
+  for (const group of walkthrough.groups) {
+    for (const file of group.files) {
+      if (!notes.has(file.path)) {
+        notes.set(file.path, {
+          groupReason: group.reason,
+          groupTitle: group.title,
+          order,
+          reason: file.reason,
+        });
+        order += 1;
+      }
+    }
+  }
+
+  return notes;
+};
+
+const orderFilesByWalkthrough = (
+  files: ReadonlyArray<ChangedFile>,
+  walkthrough: Walkthrough | null,
+) => {
+  if (!walkthrough) {
+    return files;
+  }
+
+  const filesByPath = new Map(files.map((file) => [file.path, file]));
+  const orderedFiles: Array<ChangedFile> = [];
+  const seen = new Set<string>();
+
+  for (const group of walkthrough.groups) {
+    for (const item of group.files) {
+      const file = filesByPath.get(item.path);
+      if (file && !seen.has(file.path)) {
+        orderedFiles.push(file);
+        seen.add(file.path);
+      }
+    }
+  }
+
+  for (const file of files) {
+    if (!seen.has(file.path)) {
+      orderedFiles.push(file);
+    }
+  }
+
+  return orderedFiles;
+};
 
 const fuzzyMatches = (path: string, query: string) => {
   const normalizedQuery = query.trim().toLowerCase();
@@ -544,6 +620,7 @@ type CodeViewItemMetadata = {
   isViewed: boolean;
   section: DiffSection;
   sectionCount: number;
+  walkthroughNote?: WalkthroughNote;
 };
 
 const createBinaryFileDiff = (file: ChangedFile, section: DiffSection): FileDiffMetadata => ({
@@ -836,18 +913,30 @@ export const buildReviewCommentsMarkdown = (
 
 function Sidebar({
   files,
+  mode,
   onActivatePath,
+  onModeChange,
   onSearchQueryChange,
   onSelectPath,
   searchQuery,
   selectedPath,
+  walkthroughAvailable,
+  walkthroughError,
+  walkthroughLoading,
+  walkthroughNotes,
 }: {
   files: ReadonlyArray<ChangedFile>;
+  mode: SidebarMode;
   onActivatePath: (path: string) => void;
+  onModeChange: (mode: SidebarMode) => void;
   onSearchQueryChange: (query: string) => void;
   onSelectPath: (path: string) => void;
   searchQuery: string;
   selectedPath: string | null;
+  walkthroughAvailable: boolean;
+  walkthroughError: string | null;
+  walkthroughLoading: boolean;
+  walkthroughNotes: ReadonlyMap<string, WalkthroughNote>;
 }) {
   const allowSelectionScroll = useRef(false);
   const allowSelectionScrollTimer = useRef<number | null>(null);
@@ -1007,10 +1096,126 @@ function Sidebar({
           value={searchQuery}
         />
       </div>
-      <div className="file-tree-shell" ref={treeHostRef}>
-        <FileTree className="file-tree" model={model} onClick={handleTreeClick} />
+      <div aria-label="Review order" className="sidebar-mode-toggle" role="tablist">
+        <button
+          aria-selected={mode === 'tree'}
+          onClick={() => onModeChange('tree')}
+          role="tab"
+          type="button"
+        >
+          Tree
+        </button>
+        <button
+          aria-selected={mode === 'walkthrough'}
+          disabled={walkthroughLoading}
+          onClick={() => onModeChange('walkthrough')}
+          role="tab"
+          type="button"
+        >
+          Walkthrough
+        </button>
       </div>
+      {mode === 'walkthrough' && walkthroughAvailable ? (
+        <WalkthroughSidebar
+          files={files}
+          onActivatePath={onActivatePath}
+          selectedPath={selectedPath}
+          walkthroughNotes={walkthroughNotes}
+        />
+      ) : (
+        <>
+          {walkthroughLoading ? (
+            <div className="sidebar-walkthrough-status-shell">
+              <div className="sidebar-walkthrough-status">
+                <strong>Waiting on Codex…</strong>
+                <span>Preparing walkthrough order.</span>
+              </div>
+            </div>
+          ) : walkthroughError ? (
+            <div className="sidebar-walkthrough-status" title={walkthroughError}>
+              <strong>Walkthrough unavailable</strong>
+              <span>{walkthroughError}</span>
+            </div>
+          ) : null}
+          {!walkthroughLoading ? (
+            <div className="file-tree-shell" ref={treeHostRef}>
+              <FileTree className="file-tree" model={model} onClick={handleTreeClick} />
+            </div>
+          ) : null}
+        </>
+      )}
     </>
+  );
+}
+
+function WalkthroughSidebar({
+  files,
+  onActivatePath,
+  selectedPath,
+  walkthroughNotes,
+}: {
+  files: ReadonlyArray<ChangedFile>;
+  onActivatePath: (path: string) => void;
+  selectedPath: string | null;
+  walkthroughNotes: ReadonlyMap<string, WalkthroughNote>;
+}) {
+  const groups = useMemo(() => {
+    const nextGroups: Array<{
+      files: Array<{ file: ChangedFile; note?: WalkthroughNote }>;
+      key: string;
+      reason: string;
+      title: string;
+    }> = [];
+    const groupsByTitle = new Map<string, (typeof nextGroups)[number]>();
+
+    for (const file of files) {
+      const note = walkthroughNotes.get(file.path);
+      const title = note?.groupTitle ?? 'Other changed files';
+      const reason = note?.groupReason ?? 'Review after the primary walkthrough.';
+      const key = `${title}:${reason}`;
+      let group = groupsByTitle.get(key);
+
+      if (!group) {
+        group = {
+          files: [],
+          key,
+          reason,
+          title,
+        };
+        groupsByTitle.set(key, group);
+        nextGroups.push(group);
+      }
+
+      group.files.push({ file, note });
+    }
+
+    return nextGroups;
+  }, [files, walkthroughNotes]);
+
+  return (
+    <div className="walkthrough-list">
+      {groups.map((group) => (
+        <section className="walkthrough-group" key={group.key}>
+          <div className="walkthrough-group-header" title={group.reason}>
+            {group.title}
+          </div>
+          {group.files.map(({ file, note }) => (
+            <button
+              className={`walkthrough-file${selectedPath === file.path ? ' selected' : ''}`}
+              key={file.path}
+              onClick={() => onActivatePath(file.path)}
+              title={note?.reason ?? file.path}
+              type="button"
+            >
+              <span className="walkthrough-file-path">{file.path}</span>
+              <span className="walkthrough-file-reason">
+                {note?.reason ?? 'Review this changed file.'}
+              </span>
+            </button>
+          ))}
+        </section>
+      ))}
+    </div>
   );
 }
 
@@ -1023,13 +1228,13 @@ function CodeViewHeader({
   onToggleCollapsed: (file: ChangedFile, isCollapsed: boolean) => void;
   onToggleViewed: (file: ChangedFile, isViewed: boolean) => void;
 }) {
-  const { file, isCollapsed, isSelected, isViewed, section, sectionCount } = meta;
+  const { file, isCollapsed, isSelected, isViewed, section, sectionCount, walkthroughNote } = meta;
 
   return (
     <div
-      className={`codiff-file-header${isCollapsed ? ' collapsed' : ''}${
-        isSelected ? ' selected' : ''
-      }${isViewed ? ' viewed' : ''}`}
+      className={`codiff-file-header${walkthroughNote ? ' with-note' : ''}${
+        isCollapsed ? ' collapsed' : ''
+      }${isSelected ? ' selected' : ''}${isViewed ? ' viewed' : ''}`}
     >
       <button
         aria-expanded={!isCollapsed}
@@ -1045,6 +1250,9 @@ function CodeViewHeader({
         <span className="codiff-file-heading">
           <span className="codiff-file-path">{file.path}</span>
           {file.oldPath ? <span className="codiff-file-old-path">{file.oldPath}</span> : null}
+          {walkthroughNote ? (
+            <span className="codiff-file-note">{walkthroughNote.reason}</span>
+          ) : null}
         </span>
         {sectionCount > 1 ? (
           <span className={`codiff-section-badge ${section.kind}`}>
@@ -1171,6 +1379,7 @@ function ReviewCodeView({
   selectedPath,
   showWhitespace,
   viewed,
+  walkthroughNotes,
 }: {
   activeSearchMatch: DiffSearchMatch | null;
   collapsed: ReadonlySet<string>;
@@ -1192,6 +1401,7 @@ function ReviewCodeView({
   selectedPath: string | null;
   showWhitespace: boolean;
   viewed: Record<string, string>;
+  walkthroughNotes: ReadonlyMap<string, WalkthroughNote>;
 }) {
   const codeViewRef = useRef<CodeViewHandle<ReviewAnnotationMetadata>>(null);
   const handledScrollRequestRef = useRef<number | null>(null);
@@ -1248,6 +1458,7 @@ function ReviewCodeView({
           isViewed,
           section,
           sectionCount: file.sections.length,
+          walkthroughNote: walkthroughNotes.get(file.path),
         });
         nextFirstItemByPath.set(file.path, nextFirstItemByPath.get(file.path) ?? id);
         nextItems.push({
@@ -1261,9 +1472,9 @@ function ReviewCodeView({
               isCollapsed ? 'collapsed' : 'open'
             }:${isViewed ? 'viewed' : 'pending'}:${index}:${
               selectedPath === file.path ? 'selected' : 'idle'
-            }:${showWhitespace ? 'ws' : 'ignore-ws'}:${getReviewCommentsDigest(
-              commentsBySection.get(section.id) ?? [],
-            )}`,
+            }:${walkthroughNotes.get(file.path)?.reason ?? ''}:${
+              showWhitespace ? 'ws' : 'ignore-ws'
+            }:${getReviewCommentsDigest(commentsBySection.get(section.id) ?? [])}`,
           ),
         });
       }
@@ -1283,6 +1494,7 @@ function ReviewCodeView({
     selectedPath,
     showWhitespace,
     viewed,
+    walkthroughNotes,
   ]);
 
   const codeViewOptions: CodeViewOptions<ReviewAnnotationMetadata> = useMemo(
@@ -1293,7 +1505,8 @@ function ReviewCodeView({
         enableGutterUtility: true,
         enableLineSelection: false,
         hunkSeparators: 'simple',
-        itemMetrics: codeViewItemMetrics,
+        itemMetrics:
+          walkthroughNotes.size > 0 ? codeViewItemMetricsWithWalkthrough : codeViewItemMetrics,
         layout: codeViewLayout,
         lineDiffType: 'char',
         onGutterUtilityClick: (range, context) => {
@@ -1333,7 +1546,7 @@ function ReviewCodeView({
         tokenizeMaxLength: 100_000,
         unsafeCSS: codeViewUnsafeCSS,
       }) satisfies CodeViewOptions<ReviewAnnotationMetadata>,
-    [itemMetadata, onCreateComment],
+    [itemMetadata, onCreateComment, walkthroughNotes.size],
   );
 
   const workerPoolOptions = useMemo(
@@ -1696,13 +1909,18 @@ export default function App() {
   const [gitIdentity, setGitIdentity] = useState<GitIdentity | null>(null);
   const [itemVersionByPath, setItemVersionByPath] = useState<Record<string, number>>({});
   const [localChangesDetected, setLocalChangesDetected] = useState(false);
+  const [launchOptions, setLaunchOptions] = useState<CodiffLaunchOptions>({ walkthrough: false });
   const [preferences, setPreferences] = useState<CodiffPreferences>(defaultPreferences);
   const [reviewComments, setReviewComments] = useState<ReadonlyArray<ReviewComment>>([]);
   const [scrollTarget, setScrollTarget] = useState<{ path: string; request: number } | null>(null);
   const [fileSearchQuery, setFileSearchQuery] = useState('');
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
+  const [sidebarMode, setSidebarMode] = useState<SidebarMode>('tree');
   const [state, setState] = useState<RepositoryState | null>(null);
   const [viewed, setViewed] = useState<Record<string, string>>({});
+  const [walkthrough, setWalkthrough] = useState<Walkthrough | null>(null);
+  const [walkthroughError, setWalkthroughError] = useState<string | null>(null);
+  const [walkthroughLoading, setWalkthroughLoading] = useState(false);
   const loadingSectionKeysRef = useRef<Set<string>>(new Set());
   const programmaticScrollPathRef = useRef<string | null>(null);
   const programmaticScrollTimerRef = useRef<number | null>(null);
@@ -1718,40 +1936,72 @@ export default function App() {
   useEffect(() => {
     let canceled = false;
 
-    window.codiff
-      .getRepositoryState()
-      .then((nextState) => {
-        if (canceled) {
-          return;
-        }
+    const load = async () => {
+      const nextLaunchOptions = await window.codiff.getLaunchOptions();
+      if (canceled) {
+        return;
+      }
 
-        const orderedState = {
-          ...nextState,
-          files: sortFiles(nextState.files),
-        };
-        const nextViewed = readViewed(orderedState.root);
+      setLaunchOptions(nextLaunchOptions);
+      setSidebarMode(nextLaunchOptions.walkthrough ? 'walkthrough' : 'tree');
+      setWalkthroughLoading(nextLaunchOptions.walkthrough);
 
-        setState(orderedState);
-        setError(null);
-        setCollapsed(
-          new Set(
-            orderedState.files
-              .filter((file) => nextViewed[file.path] === file.fingerprint)
-              .map((file) => file.path),
-          ),
-        );
-        setItemVersionByPath({});
-        setFocusCommentId(null);
-        setFocusCommentRequest(0);
-        setReviewComments([]);
-        setViewed(nextViewed);
-        setSelectedPath((current) => current ?? orderedState.files[0]?.path ?? null);
-      })
-      .catch((error: unknown) => {
-        if (!canceled) {
-          setError(error instanceof Error ? error.message : String(error));
-        }
-      });
+      const [nextState, walkthroughResult] = await Promise.all([
+        window.codiff.getRepositoryState(),
+        nextLaunchOptions.walkthrough ? window.codiff.getWalkthrough() : Promise.resolve(null),
+      ]);
+
+      if (canceled) {
+        return;
+      }
+
+      const nextWalkthrough =
+        walkthroughResult?.status === 'ready' ? walkthroughResult.walkthrough : null;
+
+      if (walkthroughResult?.status === 'unavailable') {
+        setWalkthroughError(walkthroughResult.reason);
+        setSidebarMode('tree');
+      } else {
+        setWalkthroughError(null);
+      }
+
+      setWalkthrough(nextWalkthrough);
+      setWalkthroughLoading(false);
+
+      const orderedState = {
+        ...nextState,
+        files: sortFiles(nextState.files),
+      };
+      const nextViewed = readViewed(orderedState.root);
+      const initialFiles = nextLaunchOptions.walkthrough
+        ? orderFilesByWalkthrough(orderedState.files, nextWalkthrough)
+        : orderedState.files;
+
+      setState(orderedState);
+      setError(null);
+      setCollapsed(
+        new Set(
+          orderedState.files
+            .filter((file) => nextViewed[file.path] === file.fingerprint)
+            .map((file) => file.path),
+        ),
+      );
+      setItemVersionByPath({});
+      setFocusCommentId(null);
+      setFocusCommentRequest(0);
+      setReviewComments([]);
+      setViewed(nextViewed);
+      setSelectedPath((current) => current ?? initialFiles[0]?.path ?? null);
+    };
+
+    load().catch((error: unknown) => {
+      if (canceled) {
+        return;
+      }
+
+      setError(error instanceof Error ? error.message : String(error));
+      setWalkthroughLoading(false);
+    });
 
     return () => {
       canceled = true;
@@ -2043,15 +2293,25 @@ export default function App() {
   }, [reviewComments]);
 
   const showWhitespace = preferences.showWhitespace;
+  const walkthroughNotes = useMemo(() => getWalkthroughNotes(walkthrough), [walkthrough]);
+  const orderedFiles = useMemo(
+    () =>
+      state
+        ? sidebarMode === 'walkthrough'
+          ? orderFilesByWalkthrough(sortFiles(state.files), walkthrough)
+          : sortFiles(state.files)
+        : [],
+    [sidebarMode, state, walkthrough],
+  );
   const fileFilteredFiles = useMemo(
     () =>
       state
-        ? sortFiles(state.files).filter(
+        ? orderedFiles.filter(
             (file) =>
               fuzzyMatches(file.path, fileSearchQuery) && fileHasVisibleDiff(file, showWhitespace),
           )
         : [],
-    [fileSearchQuery, showWhitespace, state],
+    [fileSearchQuery, orderedFiles, showWhitespace, state],
   );
 
   const diffSearchResults = useMemo(
@@ -2154,6 +2414,42 @@ export default function App() {
       programmaticScrollTimerRef.current = null;
     }, 1200);
   }, []);
+
+  const changeSidebarMode = useCallback(
+    (mode: SidebarMode) => {
+      if (mode === 'tree') {
+        setSidebarMode('tree');
+        return;
+      }
+
+      setSidebarMode('walkthrough');
+      if (walkthrough || walkthroughLoading || !state) {
+        return;
+      }
+
+      setWalkthroughLoading(true);
+      setWalkthroughError(null);
+      window.codiff
+        .getWalkthrough(state.source)
+        .then((result) => {
+          if (result.status === 'ready') {
+            setWalkthrough(result.walkthrough);
+            setSidebarMode('walkthrough');
+          } else {
+            setWalkthroughError(result.reason);
+            setSidebarMode('tree');
+          }
+        })
+        .catch((error: unknown) => {
+          setWalkthroughError(error instanceof Error ? error.message : String(error));
+          setSidebarMode('tree');
+        })
+        .finally(() => {
+          setWalkthroughLoading(false);
+        });
+    },
+    [state, walkthrough, walkthroughLoading],
+  );
 
   const toggleCollapsed = useCallback(
     (file: ChangedFile, isCollapsed: boolean) => {
@@ -2303,7 +2599,11 @@ export default function App() {
   }
 
   if (!state) {
-    return <main className="loading italic">Thinking…</main>;
+    return (
+      <main className={`loading italic${launchOptions.walkthrough ? ' codex' : ''}`}>
+        {launchOptions.walkthrough ? 'Waiting on Codex…' : 'Thinking…'}
+      </main>
+    );
   }
 
   const selectedOrSearchPath = activeDiffSearchMatch?.filePath ?? selectedPath;
@@ -2329,7 +2629,7 @@ export default function App() {
       />
       <CopyCommentsButton
         comments={reviewComments}
-        files={state.files}
+        files={orderedFiles}
         showWhitespace={showWhitespace}
       />
       <aside className="sidebar squircle">
@@ -2342,11 +2642,17 @@ export default function App() {
         </div>
         <Sidebar
           files={visibleFiles}
+          mode={sidebarMode}
           onActivatePath={activatePath}
+          onModeChange={changeSidebarMode}
           onSearchQueryChange={setFileSearchQuery}
           onSelectPath={selectPath}
           searchQuery={fileSearchQuery}
           selectedPath={visibleSelectedPath}
+          walkthroughAvailable={walkthrough != null}
+          walkthroughError={walkthroughError}
+          walkthroughLoading={walkthroughLoading}
+          walkthroughNotes={walkthroughNotes}
         />
       </aside>
       <main className="review">
@@ -2390,6 +2696,9 @@ export default function App() {
             selectedPath={visibleSelectedPath}
             showWhitespace={showWhitespace}
             viewed={viewed}
+            walkthroughNotes={
+              sidebarMode === 'walkthrough' ? walkthroughNotes : emptyWalkthroughNotes
+            }
           />
         )}
       </main>

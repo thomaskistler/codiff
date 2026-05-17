@@ -1,11 +1,13 @@
 import type {
   CodiffPreferences,
+  CodiffLaunchOptions,
   DiffSection,
   DiffSectionContentRequest,
   GitIdentity,
   RepositoryHistory,
   RepositoryState,
   ReviewSource,
+  WalkthroughResult,
 } from './types.ts';
 
 declare global {
@@ -13,9 +15,11 @@ declare global {
     codiff: {
       getDiffSectionContent: (request: DiffSectionContentRequest) => Promise<DiffSection>;
       getGitIdentity: () => Promise<GitIdentity>;
+      getLaunchOptions: () => Promise<CodiffLaunchOptions>;
       getPreferences: () => Promise<CodiffPreferences>;
       getRepositoryHistory: (limit?: number) => Promise<RepositoryHistory>;
       getRepositoryState: (source?: ReviewSource) => Promise<RepositoryState>;
+      getWalkthrough: (source?: ReviewSource) => Promise<WalkthroughResult>;
       onFindInDiffs: (callback: () => void) => () => void;
       onPreferencesChanged: (callback: (preferences: CodiffPreferences) => void) => () => void;
       onRepositoryChanged: (callback: (change: { root: string }) => void) => () => void;

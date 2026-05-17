@@ -15,6 +15,28 @@ done
 
 script_dir="$(CDPATH= cd -P "$(dirname "$source_path")" >/dev/null 2>&1 && pwd)"
 app_path="$(CDPATH= cd -P "$script_dir/../../../.." >/dev/null 2>&1 && pwd)"
-repository_path="${1:-$PWD}"
+repository_path=""
+walkthrough=0
 
-open -n "$app_path" --args "$repository_path"
+for arg in "$@"; do
+  case "$arg" in
+    --walkthrough|-w)
+      walkthrough=1
+      ;;
+    -*)
+      ;;
+    *)
+      if [ -z "$repository_path" ]; then
+        repository_path="$arg"
+      fi
+      ;;
+  esac
+done
+
+repository_path="${repository_path:-$PWD}"
+
+if [ "$walkthrough" -eq 1 ]; then
+  open -n "$app_path" --args --walkthrough "$repository_path"
+else
+  open -n "$app_path" --args "$repository_path"
+fi
