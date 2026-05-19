@@ -42,10 +42,16 @@ const {
   OPENAI_MODELS,
 } = require('./codex.cjs');
 const { readReviewAssistantReply } = require('./review-assist.cjs');
+const {
+  findMatchingWindowIdentity,
+  getWindowIdentity,
+  getWindowIdentityForSource,
+} = require('./window-identity.cjs');
 const { readWalkthrough } = require('./walkthrough.cjs');
 
 const root = dirname(__dirname);
 const repositoryWatchers = new Map();
+const windowIdentities = new Map();
 const windowRepositories = new Map();
 const windowLaunchOptions = new Map();
 let preferences = {
@@ -416,7 +422,7 @@ const openRepositoryFolder = async (browserWindow) => {
   });
 
   if (!result.canceled && result.filePaths[0]) {
-    createWindow(result.filePaths[0], { repositoryPathProvided: true, walkthrough: false });
+    focusOrCreateWindow(result.filePaths[0], { repositoryPathProvided: true, walkthrough: false });
   }
 };
 
@@ -709,6 +715,7 @@ const buildApplicationMenu = () =>
 const createWindow = (
   repositoryPath,
   launchOptions = { repositoryPathProvided: true, walkthrough: false },
+  identity = getWindowIdentity(repositoryPath, launchOptions),
 ) => {
   const display = screen.getPrimaryDisplay();
   const { height, width } = display.workAreaSize;
@@ -732,6 +739,9 @@ const createWindow = (
   });
 
   const webContentsId = window.webContents.id;
+  if (identity) {
+    windowIdentities.set(webContentsId, identity);
+  }
   windowRepositories.set(webContentsId, repositoryPath);
   windowLaunchOptions.set(webContentsId, launchOptions);
   if (!launchOptions.source) {
@@ -744,6 +754,7 @@ const createWindow = (
       clearInterval(watcher.interval);
     }
     repositoryWatchers.delete(webContentsId);
+    windowIdentities.delete(webContentsId);
     windowRepositories.delete(webContentsId);
     windowLaunchOptions.delete(webContentsId);
   });
@@ -754,6 +765,42 @@ const createWindow = (
   } else {
     window.loadURL(pathToFileURL(join(root, 'dist/index.html')).toString());
   }
+};
+
+const focusWindow = (window) => {
+  if (window.isMinimized()) {
+    window.restore();
+  }
+
+  if (!window.isVisible()) {
+    window.show();
+  }
+
+  if (process.platform === 'darwin') {
+    app.focus({ steal: true });
+  }
+  window.focus();
+};
+
+const focusOrCreateWindow = (
+  repositoryPath,
+  launchOptions = { repositoryPathProvided: true, walkthrough: false },
+) => {
+  const identity = getWindowIdentity(repositoryPath, launchOptions);
+  const matchingWebContentsId = findMatchingWindowIdentity(identity, windowIdentities);
+  const matchingWindow =
+    matchingWebContentsId == null
+      ? null
+      : BrowserWindow.getAllWindows().find(
+          (window) => window.webContents.id === matchingWebContentsId,
+        );
+
+  if (matchingWindow) {
+    focusWindow(matchingWindow);
+    return matchingWindow;
+  }
+
+  return createWindow(repositoryPath, launchOptions, identity);
 };
 
 const lock =
@@ -769,7 +816,7 @@ if (squirrelStartup || !lock) {
   app.setName('Codiff');
 
   app.on('second-instance', (event, commandLine, workingDirectory, additionalData) => {
-    createWindow(
+    focusOrCreateWindow(
       resolve(
         additionalData?.repositoryPath ||
           getCommandLineRepositoryPath(commandLine) ||
@@ -783,12 +830,12 @@ if (squirrelStartup || !lock) {
     preferences = readPreferences();
     nativeTheme.themeSource = preferences.theme;
     Menu.setApplicationMenu(buildApplicationMenu());
-    createWindow(getLaunchPath(), getLaunchOptions());
+    focusOrCreateWindow(getLaunchPath(), getLaunchOptions());
   });
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
-      createWindow(getLaunchPath(), getLaunchOptions());
+      focusOrCreateWindow(getLaunchPath(), getLaunchOptions());
     }
   });
 
@@ -801,6 +848,10 @@ ipcMain.handle('codiff:getRepositoryState', async (event, source) => {
   const repositoryPath = windowRepositories.get(event.sender.id) || getLaunchPath();
   const launchOptions = windowLaunchOptions.get(event.sender.id);
   const state = await readRepositoryState(repositoryPath, source || launchOptions?.source);
+  const identity = getWindowIdentityForSource(state.root, state.source);
+  if (identity) {
+    windowIdentities.set(event.sender.id, identity);
+  }
   await resetRepositoryWatcher(event.sender.id, repositoryPath);
   return state;
 });
