@@ -1,7 +1,7 @@
 {
   "name": "codiff",
-  "version": "0.2.1",
-  "description": "A visual diff tool for Git changes.",
+  "version": "0.3.0",
+  "description": "A fast local diff viewer.",
   "license": "MIT",
   "author": {
     "name": "Christoph Nakazawa",
