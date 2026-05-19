@@ -1,14 +1,12 @@
 import { expect, test } from 'vite-plus/test';
+import { getDiffSearchResult } from '../lib/diff-search.ts';
+import { getDiffLineCount, getVisibleDiffSections, fileHasVisibleDiff } from '../lib/diff.ts';
+import { isDiffSearchShortcut } from '../lib/keyboard.ts';
 import {
   buildReviewCommentsMarkdown,
-  fileHasVisibleDiff,
-  getDiffLineCount,
-  getDiffSearchResult,
-  getRepositoryLoadError,
-  getVisibleDiffSections,
-  isDiffSearchShortcut,
   shouldDiscardReviewCommentOnEscape,
-} from '../App.tsx';
+} from '../lib/review-comments.ts';
+import { getRepositoryLoadError } from '../lib/source.ts';
 import type { ChangedFile } from '../types.ts';
 
 test('pure renames are visible without content hunks', () => {
