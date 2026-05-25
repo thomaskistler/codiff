@@ -461,25 +461,6 @@ const createWindow = (
     window.setFullScreen(true);
   }
 
-  let normalBounds = validatedState
-    ? {
-        x: validatedState.x,
-        y: validatedState.y,
-        width: validatedState.width,
-        height: validatedState.height,
-      }
-    : window.getBounds();
-  window.on('resize', () => {
-    if (!window.isMaximized() && !window.isFullScreen()) {
-      normalBounds = window.getBounds();
-    }
-  });
-  window.on('move', () => {
-    if (!window.isMaximized() && !window.isFullScreen()) {
-      normalBounds = window.getBounds();
-    }
-  });
-
   const webContentsId = window.webContents.id;
   if (identity) {
     windowIdentities.set(webContentsId, identity);
@@ -497,6 +478,7 @@ const createWindow = (
   let copyingPendingCommentsBeforeClose = false;
   window.on('close', (event) => {
     try {
+      const normalBounds = window.getNormalBounds();
       writeWindowState({
         height: normalBounds.height,
         isFullScreen: window.isFullScreen(),
