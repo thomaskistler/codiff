@@ -218,6 +218,7 @@ test('walkthrough launch errors stay on the walkthrough tab without automatic re
       copyCommentsOnClose: true,
       lastRepositoryPath: '/repo',
       openAIModel: defaultConfig.settings.openAIModel,
+      showOutdated: false,
       showWhitespace: false,
       theme: 'system' as const,
     })),
@@ -250,6 +251,7 @@ test('walkthrough launch errors stay on the walkthrough tab without automatic re
     onRepositoryChanged: vi.fn(() => () => {}),
     openConfigFile: vi.fn(async () => {}),
     openFile: vi.fn(async () => {}),
+    setShowOutdated: vi.fn(async () => {}),
     showInFolder: vi.fn(async () => {}),
     submitPullRequestComment: vi.fn(async () => {
       throw new Error('Unexpected pull request comment submit.');

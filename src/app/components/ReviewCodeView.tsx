@@ -41,7 +41,6 @@ import type {
 } from '../../lib/app-types.ts';
 import {
   codeViewItemMetrics,
-  codeViewItemMetricsWithWalkthrough,
   codeViewLayout,
   codeViewUnsafeCSS,
   DEFAULT_PADDING,
@@ -1100,8 +1099,7 @@ export function ReviewCodeView({
         expandUnchanged: false,
         expansionLineCount: diffContextExpansionLineCount,
         hunkSeparators: 'line-info-basic',
-        itemMetrics:
-          walkthroughNotes.size > 0 ? codeViewItemMetricsWithWalkthrough : codeViewItemMetrics,
+        itemMetrics: codeViewItemMetrics,
         layout: codeViewLayout,
         lineHoverHighlight: 'both',
         onGutterUtilityClick: (range, context) => {
@@ -1164,13 +1162,7 @@ export function ReviewCodeView({
         tokenizeMaxLength: 100_000,
         unsafeCSS: codeViewUnsafeCSS,
       }) satisfies CodeViewOptions<ReviewAnnotationMetadata>,
-    [
-      cancelPendingEmptyCommentDeletes,
-      createCommentForRange,
-      itemMetadata,
-      onCreateComment,
-      walkthroughNotes.size,
-    ],
+    [cancelPendingEmptyCommentDeletes, createCommentForRange, itemMetadata, onCreateComment],
   );
 
   const focusComment = useCallback((comment: ReviewComment) => {

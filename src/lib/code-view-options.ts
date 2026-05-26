@@ -35,10 +35,6 @@ export const codeViewItemMetrics = {
   diffHeaderHeight: 54,
 };
 
-export const codeViewItemMetricsWithWalkthrough = {
-  diffHeaderHeight: 78,
-};
-
 export const diffContextExpansionLineCount = 100;
 export const diffCollapsedContextThreshold = 12;
 
