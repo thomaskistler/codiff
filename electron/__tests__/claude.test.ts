@@ -79,7 +79,7 @@ for arg in "$@"; do
   printf '%s\\n' "$arg" >> "${argsPath}"
 done
 cat > /dev/null
-printf '{"is_error":false,"result":"{\\"version\\":1}","structured_output":{"version":1}}'
+printf '%s' '{"is_error":false,"result":"{\\"version\\":1}","structured_output":{"version":1}}'
 `,
     );
     await chmod(fakeClaudePath, 0o755);
