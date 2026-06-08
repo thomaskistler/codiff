@@ -515,6 +515,8 @@ export type CodiffTheme = 'system' | 'light' | 'dark';
 export type CodiffPreferences = {
   agentBackend: 'codex' | 'claude';
   claudeModel: string;
+  codeFontFamily: string;
+  codeFontSize: number;
   copyCommentsOnClose: boolean;
   diffStyle: CodiffDiffStyle;
   editorCommand: string;

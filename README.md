@@ -95,6 +95,8 @@ is running so changes apply to open windows.
   "settings": {
     "agentBackend": "codex",
     "claudeModel": "claude-sonnet-4-6",
+    "codeFontFamily": "",
+    "codeFontSize": 13,
     "copyCommentsOnClose": false,
     "diffStyle": "split",
     "editorCommand": "",
@@ -122,10 +124,15 @@ is running so changes apply to open windows.
 Set `settings.editorCommand` to customize file opening. Use `{file}` for the selected file and
 `{repo}` for the repository root, for example `"subl \"{repo}\" \"{file}\""`.
 
-Choose `View > Split Diff` or `View > Unified Diff`, use Toggle Diff Layout in the command bar,
+Choose `View > Diff > Split` or `View > Diff > Unified`, use Toggle Diff Layout in the command bar,
 or set `settings.diffStyle` to `split` for side-by-side diffs or `unified` for unified diffs.
-Choose `View > Word Wrap`, use Toggle Word Wrap in the command bar, or set `settings.wordWrap`
-to `true` to wrap long diff lines.
+Choose `View > Diff > Word Wrap`, use Toggle Word Wrap in the command bar, or set
+`settings.wordWrap` to `true` to wrap long diff lines.
+Choose `View > Diff > Font Size`, use the code font size commands in the command bar, or use
+<kbd>Cmd/Ctrl</kbd>+<kbd>+</kbd>, <kbd>Cmd/Ctrl</kbd>+<kbd>-</kbd>, and
+<kbd>Cmd/Ctrl</kbd>+<kbd>0</kbd> to change only diff and code rendering font size.
+Set `settings.codeFontFamily` manually to an installed CSS font family name, for example
+`"JetBrains Mono"` or `"SF Mono"`. Leave it empty to use Codiff's bundled mono stack.
 Use `Mod` for <kbd>Cmd</kbd> on macOS and <kbd>Ctrl</kbd> on other platforms. Shortcut strings can
 combine `Mod`, `Ctrl`, `Alt`, `Shift`, or `Meta` with a key, for example `Mod+Shift+p` or
 `Alt+Enter`.

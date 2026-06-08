@@ -114,6 +114,9 @@ import type {
 const emptyWalkthroughNotes = new Map<string, WalkthroughNote>();
 const emptyFiles: ReadonlyArray<ChangedFile> = [];
 type MainMode = 'review' | 'commit';
+const CODE_FONT_SIZE_DEFAULT = 13;
+const CODE_FONT_SIZE_MAX = 32;
+const CODE_FONT_SIZE_MIN = 10;
 
 const getFailedSectionLoadState = (section: DiffSection): DiffSection =>
   isPatchOnlyDiffSection(section)
@@ -136,6 +139,13 @@ const getFailedSectionLoadState = (section: DiffSection): DiffSection =>
 const getPreferencesFromConfig = ({ settings }: CodiffConfig): CodiffPreferences => ({
   ...settings,
 });
+
+const normalizeCodeFontSizePreference = (size: number) =>
+  Number.isFinite(size)
+    ? Math.min(CODE_FONT_SIZE_MAX, Math.max(CODE_FONT_SIZE_MIN, Math.round(size)))
+    : CODE_FONT_SIZE_DEFAULT;
+
+const getCodeFontLineHeight = (size: number) => Math.round((size * 20) / 13);
 
 const createInlineWalkthroughNote = (reason: string): WalkthroughNote => ({
   action: 'review',
@@ -712,6 +722,27 @@ export default function App() {
       root.setAttribute('data-theme', preferences.theme);
     }
   }, [preferences.theme]);
+
+  useEffect(() => {
+    const root = document.documentElement;
+    const codeFontFamily = preferences.codeFontFamily.trim();
+    const codeFontSize = normalizeCodeFontSizePreference(preferences.codeFontSize);
+
+    if (codeFontFamily) {
+      root.style.setProperty('--font-diff-mono', `${JSON.stringify(codeFontFamily)}, monospace`);
+    } else {
+      root.style.removeProperty('--font-diff-mono');
+    }
+
+    root.style.setProperty('--font-diff-size', `${codeFontSize}px`);
+    root.style.setProperty('--font-diff-line-height', `${getCodeFontLineHeight(codeFontSize)}px`);
+
+    return () => {
+      root.style.removeProperty('--font-diff-mono');
+      root.style.removeProperty('--font-diff-size');
+      root.style.removeProperty('--font-diff-line-height');
+    };
+  }, [preferences.codeFontFamily, preferences.codeFontSize]);
 
   useEffect(
     () => () => {
@@ -1307,6 +1338,11 @@ export default function App() {
     setMainMode('commit');
   }, [narrativeNavigation]);
 
+  const closeCommitView = useCallback(() => {
+    setSidebarMode('tree');
+    setMainMode('review');
+  }, []);
+
   useEffect(() => {
     const registry = commandRegistryRef.current;
     const unregisterFns = [
@@ -1472,6 +1508,34 @@ export default function App() {
         id: 'toggle-word-wrap',
         keymapAction: 'toggleWordWrap',
         title: 'Toggle Word Wrap',
+      }),
+      registry.register({
+        execute: () => {
+          void window.codiff.increaseCodeFontSize().catch(() => {});
+        },
+        id: 'increase-code-font-size',
+        title: 'Increase Code Font Size',
+      }),
+      registry.register({
+        execute: () => {
+          void window.codiff.decreaseCodeFontSize().catch(() => {});
+        },
+        id: 'decrease-code-font-size',
+        title: 'Decrease Code Font Size',
+      }),
+      registry.register({
+        execute: () => {
+          void window.codiff.resetCodeFontSize().catch(() => {});
+        },
+        id: 'reset-code-font-size',
+        title: 'Reset Code Font Size',
+      }),
+      registry.register({
+        execute: () => {
+          void window.codiff.openConfigFile().catch(() => {});
+        },
+        id: 'open-config-file',
+        title: 'Open Config File',
       }),
       registry.register({
         execute: reloadWindow,
@@ -1949,6 +2013,9 @@ export default function App() {
     : buildGenericCommitModel(state.files);
   const showPlainCommitView =
     mainMode === 'commit' && state.source.type === 'working-tree' && state.files.length > 0;
+  const diffLineHeight = getCodeFontLineHeight(
+    normalizeCodeFontSizePreference(preferences.codeFontSize),
+  );
   // Props shared by the full review and the per-stop scoped diffs, so the two
   // render paths can't drift apart.
   const commonReviewProps = {
@@ -1958,6 +2025,7 @@ export default function App() {
     collapsed,
     comments: visibleReviewComments,
     commitMetadata: state.source.type === 'commit' ? (state.commitMetadata ?? null) : null,
+    diffLineHeight,
     diffStyle,
     focusCommentId,
     focusCommentRequest,
@@ -2112,6 +2180,7 @@ export default function App() {
         <Sidebar
           branchSource={historySource?.type === 'branch-diff' ? historySource : null}
           commitFiles={state.files}
+          commitViewOpen={showPlainCommitView}
           currentSource={pendingSource ?? state.source}
           files={visibleFiles}
           historyEntries={historyEntries}
@@ -2124,12 +2193,12 @@ export default function App() {
           onActivatePath={activatePath}
           onLoadMoreHistory={loadMoreHistory}
           onModeChange={changeSidebarMode}
-          onOpenCommit={openCommitView}
           onSearchQueryChange={
             sidebarMode === 'history' ? setHistorySearchQuery : setFileSearchQuery
           }
           onSelectPath={selectPath}
           onSelectSource={selectSource}
+          onToggleCommitView={showPlainCommitView ? closeCommitView : openCommitView}
           pullRequestSource={historySource?.type === 'pull-request' ? historySource : null}
           reloadDeltaPaths={reloadDeltaPaths}
           searchQuery={sidebarMode === 'history' ? historySearchQuery : fileSearchQuery}

@@ -70,6 +70,9 @@ Object.defineProperty(globalThis, 'sessionStorage', {
 beforeEach(() => {
   window.localStorage.clear();
   window.sessionStorage.clear();
+  document.documentElement.style.removeProperty('--font-diff-line-height');
+  document.documentElement.style.removeProperty('--font-diff-mono');
+  document.documentElement.style.removeProperty('--font-diff-size');
 });
 
 const repositoryState = {
@@ -123,6 +126,7 @@ const createCodiffMock = (overrides: Partial<Window['codiff']> = {}): Window['co
     hash: '0000000000000000000000000000000000000000',
     status: 'committed' as const,
   })),
+  decreaseCodeFontSize: vi.fn(async () => {}),
   getAgentSkillStatus: vi.fn(async () => ({
     installed: true,
     path: '/Users/reviewer/.codex/skills/codiff',
@@ -150,6 +154,8 @@ const createCodiffMock = (overrides: Partial<Window['codiff']> = {}): Window['co
   getPreferences: vi.fn(async () => ({
     agentBackend: 'codex' as const,
     claudeModel: defaultSettings.claudeModel,
+    codeFontFamily: defaultSettings.codeFontFamily,
+    codeFontSize: defaultSettings.codeFontSize,
     copyCommentsOnClose: true,
     diffStyle: 'split' as const,
     editorCommand: '',
@@ -171,6 +177,7 @@ const createCodiffMock = (overrides: Partial<Window['codiff']> = {}): Window['co
     installed: true,
     path: '/usr/local/bin/codiff',
   })),
+  increaseCodeFontSize: vi.fn(async () => {}),
   installAgentSkill: vi.fn(async () => ({
     installed: true,
     path: '/Users/reviewer/.codex/skills/codiff',
@@ -186,6 +193,7 @@ const createCodiffMock = (overrides: Partial<Window['codiff']> = {}): Window['co
   onRepositoryChanged: vi.fn(() => () => {}),
   openConfigFile: vi.fn(async () => {}),
   openFile: vi.fn(async () => {}),
+  resetCodeFontSize: vi.fn(async () => {}),
   setDiffStyle: vi.fn(async () => {}),
   setShowOutdated: vi.fn(async () => {}),
   setWalkthroughOrder: vi.fn(async () => {}),
@@ -239,6 +247,98 @@ const renderAppForOpenFileShortcut = async (file: ChangedFile) => {
     openFile,
   };
 };
+
+test('code font preferences update root CSS variables', async () => {
+  const nextConfig = createDefaultConfig();
+  nextConfig.settings.codeFontFamily = 'JetBrains Mono';
+  nextConfig.settings.codeFontSize = 14;
+  window.codiff = createCodiffMock({
+    getConfig: vi.fn(async () => nextConfig),
+  });
+
+  const container = document.createElement('div');
+  document.body.append(container);
+  const root = createRoot(container);
+
+  await act(async () => {
+    root.render(<App />);
+  });
+
+  await waitFor(() => {
+    expect(document.documentElement.style.getPropertyValue('--font-diff-mono')).toBe(
+      '"JetBrains Mono", monospace',
+    );
+    expect(document.documentElement.style.getPropertyValue('--font-diff-size')).toBe('14px');
+    expect(document.documentElement.style.getPropertyValue('--font-diff-line-height')).toBe('22px');
+  });
+
+  await act(async () => root.unmount());
+  container.remove();
+});
+
+test('empty code font family removes the root CSS variable', async () => {
+  document.documentElement.style.setProperty('--font-diff-mono', 'stale');
+  window.codiff = createCodiffMock();
+
+  const container = document.createElement('div');
+  document.body.append(container);
+  const root = createRoot(container);
+
+  await act(async () => {
+    root.render(<App />);
+  });
+
+  await waitFor(() => {
+    expect(document.documentElement.style.getPropertyValue('--font-diff-mono')).toBe('');
+    expect(document.documentElement.style.getPropertyValue('--font-diff-size')).toBe('13px');
+    expect(document.documentElement.style.getPropertyValue('--font-diff-line-height')).toBe('20px');
+  });
+
+  await act(async () => root.unmount());
+  container.remove();
+});
+
+test('sidebar commit button toggles back to tree when commit view is open', async () => {
+  window.codiff = createCodiffMock({
+    getRepositoryState: vi.fn(async () => ({
+      ...repositoryState,
+      files: [createChangedFile('src/change.ts')],
+    })),
+  });
+
+  const container = document.createElement('div');
+  document.body.append(container);
+  const root = createRoot(container);
+
+  await act(async () => {
+    root.render(<App />);
+  });
+
+  await waitFor(() => {
+    expect(container.querySelector('.sidebar-commit-button')?.textContent).toBe('Commit');
+  });
+
+  await act(async () => {
+    container.querySelector<HTMLButtonElement>('.sidebar-commit-button')?.click();
+  });
+
+  await waitFor(() => {
+    expect(container.querySelector('.wt-commit')).not.toBeNull();
+    expect(container.querySelector('.sidebar-commit-button')?.textContent).toBe('Tree');
+  });
+
+  await act(async () => {
+    container.querySelector<HTMLButtonElement>('.sidebar-commit-button')?.click();
+  });
+
+  await waitFor(() => {
+    expect(container.querySelector('.wt-commit')).toBeNull();
+    expect(container.querySelector('.sidebar-commit-button')?.textContent).toBe('Commit');
+  });
+
+  await act(async () => root.unmount());
+  container.remove();
+});
 
 test('repository reload restores the selected file when it still exists', async () => {
   const firstFile = createChangedFile('src/first.ts');

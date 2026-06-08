@@ -8,9 +8,10 @@ import schema from '../config/codiff-config.schema.json' with { type: 'json' };
 import { createDefaultConfig } from '../config/defaults.ts';
 
 const require = createRequire(import.meta.url);
-const { createDefaultConfig: createElectronDefaultConfig } =
+const { createDefaultConfig: createElectronDefaultConfig, mergeConfig } =
   require('../../electron/config.cjs') as {
     createDefaultConfig: typeof createDefaultConfig;
+    mergeConfig: (raw: unknown) => ReturnType<typeof createDefaultConfig>;
   };
 
 const getSchemaDefaults = (section: 'keymap' | 'settings') =>
@@ -30,6 +31,32 @@ test('schema defaults match config defaults', () => {
 
 test('electron and renderer defaults match', () => {
   expect(createElectronDefaultConfig()).toEqual(createDefaultConfig());
+});
+
+test('electron config normalizes code font settings', () => {
+  expect(mergeConfig({}).settings.codeFontFamily).toBe('');
+  expect(mergeConfig({}).settings.codeFontSize).toBe(13);
+
+  expect(
+    mergeConfig({
+      settings: {
+        codeFontFamily: '  JetBrains Mono  ',
+        codeFontSize: 14.6,
+      },
+    }).settings,
+  ).toMatchObject({
+    codeFontFamily: 'JetBrains Mono',
+    codeFontSize: 15,
+  });
+
+  expect(
+    mergeConfig({ settings: { codeFontFamily: 42, codeFontSize: 'large' } }).settings,
+  ).toMatchObject({
+    codeFontFamily: '',
+    codeFontSize: 13,
+  });
+  expect(mergeConfig({ settings: { codeFontSize: 8 } }).settings.codeFontSize).toBe(10);
+  expect(mergeConfig({ settings: { codeFontSize: 99 } }).settings.codeFontSize).toBe(32);
 });
 
 test('electron defaults load from packaged app shape', () => {

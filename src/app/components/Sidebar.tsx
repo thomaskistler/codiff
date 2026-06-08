@@ -27,6 +27,7 @@ import type { NarrativeNavigation } from './walkthrough/useNarrativeNavigation.t
 export function Sidebar({
   branchSource,
   commitFiles,
+  commitViewOpen,
   currentSource,
   files,
   historyEntries,
@@ -39,10 +40,10 @@ export function Sidebar({
   onActivatePath,
   onLoadMoreHistory,
   onModeChange,
-  onOpenCommit,
   onSearchQueryChange,
   onSelectPath,
   onSelectSource,
+  onToggleCommitView,
   pullRequestSource,
   reloadDeltaPaths,
   searchQuery,
@@ -54,6 +55,7 @@ export function Sidebar({
 }: {
   branchSource: Extract<ReviewSource, { type: 'branch-diff' }> | null;
   commitFiles: ReadonlyArray<ChangedFile>;
+  commitViewOpen: boolean;
   currentSource: ReviewSource;
   files: ReadonlyArray<ChangedFile>;
   historyEntries: ReadonlyArray<HistoryEntry>;
@@ -66,10 +68,10 @@ export function Sidebar({
   onActivatePath: (path: string) => void;
   onLoadMoreHistory: () => void;
   onModeChange: (mode: SidebarMode) => void;
-  onOpenCommit: () => void;
   onSearchQueryChange: (query: string) => void;
   onSelectPath: (path: string) => void;
   onSelectSource: (source: ReviewSource) => void;
+  onToggleCommitView: () => void;
   pullRequestSource: PullRequestSource | null;
   reloadDeltaPaths: ReadonlySet<string>;
   searchQuery: string;
@@ -366,11 +368,12 @@ export function Sidebar({
           </span>
           {showCommitButton ? (
             <button
+              aria-label={commitViewOpen ? 'Show file tree' : 'Open commit view'}
               className="codiff-open-button sidebar-commit-button"
-              onClick={onOpenCommit}
+              onClick={onToggleCommitView}
               type="button"
             >
-              Commit
+              {commitViewOpen ? 'Tree' : 'Commit'}
             </button>
           ) : null}
         </div>

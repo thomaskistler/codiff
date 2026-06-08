@@ -11,6 +11,7 @@ const codiff = {
     ipcRenderer.invoke('codiff:updateWalkthroughCommitMessage', request),
   getAgentSkillStatus: () => ipcRenderer.invoke('codiff:getAgentSkillStatus'),
   getConfig: () => ipcRenderer.invoke('codiff:getConfig'),
+  decreaseCodeFontSize: () => ipcRenderer.invoke('codiff:decreaseCodeFontSize'),
   getDiffSectionContent: (request) => ipcRenderer.invoke('codiff:getDiffSectionContent', request),
   getDiffImageContent: (request) => ipcRenderer.invoke('codiff:getDiffImageContent', request),
   getGitIdentity: () => ipcRenderer.invoke('codiff:getGitIdentity'),
@@ -23,6 +24,7 @@ const codiff = {
   getNarrativeWalkthrough: (source) => ipcRenderer.invoke('codiff:getNarrativeWalkthrough', source),
   installAgentSkill: () => ipcRenderer.invoke('codiff:installAgentSkill'),
   installTerminalHelper: () => ipcRenderer.invoke('codiff:installTerminalHelper'),
+  increaseCodeFontSize: () => ipcRenderer.invoke('codiff:increaseCodeFontSize'),
   onConfigChanged: (callback) => {
     /** @param {Electron.IpcRendererEvent} _event @param {import('../src/config/types.ts').CodiffConfig} nextConfig */
     const listener = (_event, nextConfig) => callback(nextConfig);
@@ -65,6 +67,7 @@ const codiff = {
   setShowOutdated: (value) => ipcRenderer.invoke('codiff:setShowOutdated', value),
   setWalkthroughOrder: (value) => ipcRenderer.invoke('codiff:setWalkthroughOrder', value),
   setWordWrap: (value) => ipcRenderer.invoke('codiff:setWordWrap', value),
+  resetCodeFontSize: () => ipcRenderer.invoke('codiff:resetCodeFontSize'),
   showInFolder: (path) => ipcRenderer.invoke('codiff:showInFolder', path),
   submitPullRequestComment: (request) =>
     ipcRenderer.invoke('codiff:submitPullRequestComment', request),

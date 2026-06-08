@@ -978,6 +978,7 @@ export function ReviewCodeView({
   collapsed,
   comments,
   commitMetadata,
+  diffLineHeight = DIFF_LINE_HEIGHT,
   diffStyle,
   files,
   focusCommentId,
@@ -1014,6 +1015,7 @@ export function ReviewCodeView({
   collapsed: ReadonlySet<string>;
   comments: ReadonlyArray<ReviewComment>;
   commitMetadata: CommitMetadata | null;
+  diffLineHeight?: number;
   diffStyle: CodiffDiffStyle;
   files: ReadonlyArray<ChangedFile>;
   focusCommentId: string | null;
@@ -1126,6 +1128,7 @@ export function ReviewCodeView({
     const nextItems: Array<CodeViewItem<ReviewAnnotationMetadata>> = [];
     const nextFirstItemByPath = new Map<string, string>();
     const nextItemMetadata = new Map<string, CodeViewItemMetadata>();
+    const fontLayoutKey = `line-height:${diffLineHeight}`;
 
     for (const file of files) {
       const isViewed = viewed[file.path] === file.fingerprint;
@@ -1203,7 +1206,7 @@ export function ReviewCodeView({
                 isCollapsed ? 'collapsed' : 'open'
               }:${isViewed ? 'viewed' : 'pending'}:${index}:${
                 selectedPath === file.path ? 'selected' : 'idle'
-              }:${walkthroughNotes.get(file.path)?.reason ?? ''}:${
+              }:${fontLayoutKey}:${walkthroughNotes.get(file.path)?.reason ?? ''}:${
                 imagePreviewLayoutPassBySection[section.id] ?? 0
               }`,
             ),
@@ -1243,9 +1246,9 @@ export function ReviewCodeView({
                 isCollapsed ? 'collapsed' : 'open'
               }:${isViewed ? 'viewed' : 'pending'}:${index}:${
                 selectedPath === file.path ? 'selected' : 'idle'
-              }:${walkthroughNotes.get(file.path)?.reason ?? ''}:${markdownPreviewLayoutKey}:${
-                markdownPreviewLayoutPassBySection[section.id] ?? 0
-              }`,
+              }:${fontLayoutKey}:${walkthroughNotes.get(file.path)?.reason ?? ''}:${
+                markdownPreviewLayoutKey
+              }:${markdownPreviewLayoutPassBySection[section.id] ?? 0}`,
             ),
           });
           continue;
@@ -1261,7 +1264,7 @@ export function ReviewCodeView({
               isCollapsed ? 'collapsed' : 'open'
             }:${isViewed ? 'viewed' : 'pending'}:${index}:${
               selectedPath === file.path ? 'selected' : 'idle'
-            }:${walkthroughNotes.get(file.path)?.reason ?? ''}:${
+            }:${fontLayoutKey}:${walkthroughNotes.get(file.path)?.reason ?? ''}:${
               showWhitespace ? 'ws' : 'ignore-ws'
             }:${diffStyle}:${getReviewCommentsDigest(commentsBySection.get(section.id) ?? [])}`,
           ),
@@ -1307,7 +1310,7 @@ export function ReviewCodeView({
             commitMetadata,
             commitDetailsLayoutPass,
             navigationKey,
-          )}:${commitDetailsCollapsed ? 'collapsed' : 'open'}`,
+          )}:${fontLayoutKey}:${commitDetailsCollapsed ? 'collapsed' : 'open'}`,
         ),
       });
     }
@@ -1325,6 +1328,7 @@ export function ReviewCodeView({
     commitDetailsLayoutPass,
     commitMetadata,
     commentsBySection,
+    diffLineHeight,
     diffStyle,
     files,
     forceExpandedPaths,
@@ -1760,7 +1764,7 @@ export function ReviewCodeView({
             key: `line:${item.id}:${side}:${lineNumber}`,
             scrollTarget: lineScrollTarget(item.id, lineNumber, side),
             selection,
-            top: headerTop + renderedIndex * DIFF_LINE_HEIGHT,
+            top: headerTop + renderedIndex * diffLineHeight,
           },
           renderedIndex,
         });
@@ -1850,6 +1854,7 @@ export function ReviewCodeView({
     clearCommentLineHighlight,
     commentsBySection,
     commitDetailsItemId,
+    diffLineHeight,
     diffStyle,
     hunkNavigation,
     itemMetadata,

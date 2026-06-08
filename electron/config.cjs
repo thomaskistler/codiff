@@ -23,6 +23,9 @@ const defaultConfigTemplate = require('../config/defaults.json');
 
 const SCHEMA_URL =
   'https://raw.githubusercontent.com/nkzw-tech/codiff/main/src/config/codiff-config.schema.json';
+const CODE_FONT_SIZE_DEFAULT = 13;
+const CODE_FONT_SIZE_MAX = 32;
+const CODE_FONT_SIZE_MIN = 10;
 
 /** @returns {CodiffConfig} */
 const createDefaultConfig = () => ({
@@ -116,6 +119,18 @@ const normalizeDiffStyle = (diffStyle) =>
 /** @param {unknown} backend @returns {'codex' | 'claude'} */
 const normalizeAgentBackend = (backend) =>
   backend === 'codex' || backend === 'claude' ? backend : 'codex';
+
+/** @param {unknown} family @returns {string} */
+const normalizeCodeFontFamily = (family) => (typeof family === 'string' ? family.trim() : '');
+
+/** @param {unknown} size @returns {number} */
+const normalizeCodeFontSize = (size) => {
+  if (typeof size !== 'number' || !Number.isFinite(size)) {
+    return CODE_FONT_SIZE_DEFAULT;
+  }
+
+  return Math.min(CODE_FONT_SIZE_MAX, Math.max(CODE_FONT_SIZE_MIN, Math.round(size)));
+};
 
 /** @param {unknown} path */
 const normalizeLastRepositoryPath = (path) =>
@@ -224,6 +239,8 @@ const mergeConfig = (raw) => {
         typeof rawSettings.claudeModel === 'string'
           ? rawSettings.claudeModel
           : defaults.settings.claudeModel,
+      codeFontFamily: normalizeCodeFontFamily(rawSettings.codeFontFamily),
+      codeFontSize: normalizeCodeFontSize(rawSettings.codeFontSize),
       copyCommentsOnClose:
         typeof rawSettings.copyCommentsOnClose === 'boolean'
           ? rawSettings.copyCommentsOnClose
@@ -406,6 +423,8 @@ module.exports = {
   initConfig,
   mergeConfig,
   migrateFromPreferences,
+  normalizeCodeFontFamily,
+  normalizeCodeFontSize,
   readConfig,
   watchConfig,
   writeConfig,

@@ -35,8 +35,8 @@ export const codeViewItemMetrics = {
   diffHeaderHeight: 54,
 };
 
-// Matches --diffs-line-height in codeViewUnsafeCSS. Used to estimate the
-// absolute Y of a hunk or comment when picking the next/previous nav anchor.
+// Default-path line height for diff layout estimates. Runtime diff rendering
+// may override --diffs-line-height through code font preferences.
 export const DIFF_LINE_HEIGHT = 20;
 
 export const diffContextExpansionLineCount = 100;
@@ -67,9 +67,9 @@ export const markdownCodeBlockOptions = {
   tokenizeMaxLineLength: 20_000,
   unsafeCSS: `
     :host {
-      --diffs-font-family: var(--font-mono);
-      --diffs-font-size: 13px;
-      --diffs-line-height: 20px;
+      --diffs-font-family: var(--font-diff-mono, var(--font-mono));
+      --diffs-font-size: var(--font-diff-size, 13px);
+      --diffs-line-height: var(--font-diff-line-height, 20px);
       --diffs-light-bg: transparent;
       --diffs-dark-bg: transparent;
       --diffs-bg: transparent;
@@ -145,10 +145,10 @@ export const maxWorkerThreads = 3;
 
 export const codeViewUnsafeCSS = `
   :host {
-    --diffs-font-family: var(--font-mono);
+    --diffs-font-family: var(--font-diff-mono, var(--font-mono));
     --diffs-header-font-family: var(--font-sans);
-    --diffs-font-size: 13px;
-    --diffs-line-height: 20px;
+    --diffs-font-size: var(--font-diff-size, 13px);
+    --diffs-line-height: var(--font-diff-line-height, 20px);
     --diffs-light-bg: #ffffff;
     --diffs-dark-bg: #1c1c1c;
     --diffs-bg-selection-override: rgb(61 135 245 / 0.34);

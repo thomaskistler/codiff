@@ -37,6 +37,8 @@ const {
   getConfigPath,
   initConfig,
   migrateFromPreferences,
+  normalizeCodeFontFamily,
+  normalizeCodeFontSize,
   readConfig,
   watchConfig,
   writeConfig,
@@ -152,6 +154,12 @@ const updateConfig = (nextConfig) => {
       claudeModel: normalizeClaudeModel(
         nextConfig.settings?.claudeModel ?? config.settings.claudeModel,
       ),
+      codeFontFamily: normalizeCodeFontFamily(
+        nextConfig.settings?.codeFontFamily ?? config.settings.codeFontFamily,
+      ),
+      codeFontSize: normalizeCodeFontSize(
+        nextConfig.settings?.codeFontSize ?? config.settings.codeFontSize,
+      ),
       openAIModel: normalizeOpenAIModel(
         nextConfig.settings?.openAIModel ?? config.settings.openAIModel,
       ),
@@ -218,6 +226,28 @@ const mergeWalkthroughContexts = (providedContext, sessionContext) => {
 /** @param {CodiffTheme} theme */
 const updateTheme = (theme) => {
   updateConfig({ settings: { ...config.settings, theme } });
+};
+
+/** @param {number} size */
+const setCodeFontSize = (size) => {
+  const codeFontSize = normalizeCodeFontSize(size);
+  if (config.settings.codeFontSize === codeFontSize) {
+    return;
+  }
+
+  updateConfig({ settings: { ...config.settings, codeFontSize } });
+};
+
+const increaseCodeFontSize = () => {
+  setCodeFontSize(config.settings.codeFontSize + 1);
+};
+
+const decreaseCodeFontSize = () => {
+  setCodeFontSize(config.settings.codeFontSize - 1);
+};
+
+const resetCodeFontSize = () => {
+  setCodeFontSize(13);
 };
 
 /** @param {string} repositoryPath */
@@ -502,6 +532,27 @@ const buildApplicationMenu = () =>
                 },
                 label: 'Show Whitespace',
                 type: 'checkbox',
+              },
+              { type: 'separator' },
+              {
+                label: 'Font Size',
+                submenu: [
+                  {
+                    accelerator: process.platform === 'darwin' ? 'Command+Plus' : 'Control+Plus',
+                    click: increaseCodeFontSize,
+                    label: 'Increase',
+                  },
+                  {
+                    accelerator: 'CommandOrControl+-',
+                    click: decreaseCodeFontSize,
+                    label: 'Decrease',
+                  },
+                  {
+                    accelerator: 'CommandOrControl+0',
+                    click: resetCodeFontSize,
+                    label: 'Reset',
+                  },
+                ],
               },
             ],
           },
@@ -811,6 +862,8 @@ if (squirrelStartup || !lock) {
           ...nextConfig.settings,
           agentBackend: normalizeAgentBackend(nextConfig.settings.agentBackend),
           claudeModel: normalizeClaudeModel(nextConfig.settings.claudeModel),
+          codeFontFamily: normalizeCodeFontFamily(nextConfig.settings.codeFontFamily),
+          codeFontSize: normalizeCodeFontSize(nextConfig.settings.codeFontSize),
           openAIModel: normalizeOpenAIModel(nextConfig.settings.openAIModel),
         },
       };
@@ -1027,6 +1080,18 @@ ipcMain.handle('codiff:setWalkthroughOrder', (_event, value) => {
 
 ipcMain.handle('codiff:setWordWrap', (_event, value) => {
   updateConfig({ settings: { ...config.settings, wordWrap: Boolean(value) } });
+});
+
+ipcMain.handle('codiff:increaseCodeFontSize', () => {
+  increaseCodeFontSize();
+});
+
+ipcMain.handle('codiff:decreaseCodeFontSize', () => {
+  decreaseCodeFontSize();
+});
+
+ipcMain.handle('codiff:resetCodeFontSize', () => {
+  resetCodeFontSize();
 });
 
 ipcMain.handle('codiff:openConfigFile', () => openConfigFile());
