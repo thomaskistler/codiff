@@ -61,6 +61,7 @@ import { buildCommitModel, buildGenericCommitModel } from './lib/narrative-walkt
 import {
   consumeReloadSelection,
   getReloadDeltaPaths,
+  getReloadHistorySource,
   getReloadSelectionPath,
   writeReloadSelection,
 } from './lib/reload-selection.ts';
@@ -79,7 +80,18 @@ import {
   writeSidebarCollapsed,
   writeSidebarWidth,
 } from './lib/sidebar-width.ts';
-import { getRepositoryLoadError, getShortRef, getSourceKey, getSourceLabel } from './lib/source.ts';
+import {
+  getEmptySourceDetail,
+  getEmptySourceTitle,
+  getHistorySource,
+  getRepositoryLoadError,
+  getSourceKey,
+  getSourceLabel,
+  shouldStartInHistoryWhenEmpty,
+  supportsDiffSearchContentPreload,
+  supportsLazyDiffContent,
+  usesViewedFileState,
+} from './lib/source.ts';
 import { readViewed, writeViewed } from './lib/viewed.ts';
 import type {
   ChangedFile,
@@ -137,6 +149,23 @@ const createInlineWalkthroughNote = (reason: string): WalkthroughNote => ({
 
 const defaultPreferences = getPreferencesFromConfig(createDefaultConfig());
 
+const getReloadSourceForLaunch = (
+  reloadSelection: ReturnType<typeof consumeReloadSelection>,
+  launchOptions: CodiffLaunchOptions,
+) => {
+  if (!reloadSelection) {
+    return undefined;
+  }
+
+  if (!launchOptions.source) {
+    return reloadSelection.source;
+  }
+
+  return getSourceKey(reloadSelection.source) === getSourceKey(launchOptions.source)
+    ? reloadSelection.source
+    : undefined;
+};
+
 export default function App() {
   const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set());
   const [activeDiffSearchMatchIndex, setActiveDiffSearchMatchIndex] = useState(0);
@@ -187,6 +216,7 @@ export default function App() {
   const [walkthroughUnread, setWalkthroughUnread] = useState(false);
   const [mainMode, setMainMode] = useState<MainMode>('review');
   const historyRequestRef = useRef(0);
+  const historySourceRef = useRef<ReviewSource | null>(null);
   const loadingSectionKeysRef = useRef<Set<string>>(new Set());
   const programmaticScrollPathRef = useRef<string | null>(null);
   const programmaticScrollTimerRef = useRef<number | null>(null);
@@ -236,9 +266,7 @@ export default function App() {
       const currentState = repositoryState;
       if (
         !currentState ||
-        (currentState.source.type !== 'working-tree' &&
-          currentState.source.type !== 'commit' &&
-          currentState.source.type !== 'range') ||
+        !supportsLazyDiffContent(currentState.source) ||
         !shouldLoadDiffSectionContents(section)
       ) {
         return;
@@ -386,7 +414,9 @@ export default function App() {
       }
       setTerminalHelperStatus(nextTerminalHelperStatus);
 
-      const nextState = await window.codiff.getRepositoryState(reloadSelection?.source);
+      const nextState = await window.codiff.getRepositoryState(
+        getReloadSourceForLaunch(reloadSelection, nextLaunchOptions),
+      );
 
       if (canceled) {
         return;
@@ -396,11 +426,12 @@ export default function App() {
         ...nextState,
         files: sortFiles(nextState.files),
       };
+      const nextHistorySource =
+        getReloadHistorySource(reloadSelection, orderedState) ??
+        getHistorySource(orderedState.source);
       const history = await window.codiff.getRepositoryHistory(
         HISTORY_PAGE_SIZE,
-        orderedState.source.type === 'pull-request' || orderedState.source.type === 'branch'
-          ? orderedState.source
-          : undefined,
+        nextHistorySource,
       );
 
       if (canceled) {
@@ -410,8 +441,7 @@ export default function App() {
       const filesPresent = orderedState.files.length > 0;
       const shouldLoadNarrative = nextLaunchOptions.walkthrough && filesPresent;
       const shouldStartInHistory =
-        (orderedState.source.type === 'working-tree' || orderedState.source.type === 'branch') &&
-        orderedState.files.length === 0;
+        shouldStartInHistoryWhenEmpty(orderedState.source) && orderedState.files.length === 0;
 
       setLaunchOptions(nextLaunchOptions);
       setSidebarMode(
@@ -437,19 +467,16 @@ export default function App() {
 
       setWalkthroughLoading(false);
 
-      const nextViewed =
-        orderedState.source.type === 'working-tree' ? readViewed(orderedState.root) : {};
+      const nextViewed = usesViewedFileState(orderedState.source)
+        ? readViewed(orderedState.root)
+        : {};
       const reloadSelectedPath = getReloadSelectionPath(reloadSelection, orderedState);
       const nextReloadDeltaPaths = getReloadDeltaPaths(reloadSelection, orderedState);
 
       setHistoryEntries(history.entries);
       setHistoryHasMore(history.entries.length >= HISTORY_PAGE_SIZE);
       setHistoryLimit(HISTORY_PAGE_SIZE);
-      setHistorySource(
-        orderedState.source.type === 'pull-request' || orderedState.source.type === 'branch'
-          ? orderedState.source
-          : null,
-      );
+      setHistorySource(nextHistorySource ?? null);
       setState(orderedState);
       setLoadError(null);
       setCollapsed(
@@ -516,13 +543,7 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (
-      !state ||
-      (state.source.type !== 'working-tree' &&
-        state.source.type !== 'commit' &&
-        state.source.type !== 'range') ||
-      !selectedPath
-    ) {
+    if (!state || !supportsLazyDiffContent(state.source) || !selectedPath) {
       return;
     }
 
@@ -543,7 +564,7 @@ export default function App() {
   }, [loadDiffSection, selectedPath, state]);
 
   useEffect(() => {
-    if (!state || state.source.type !== 'working-tree' || !diffSearchQuery.trim()) {
+    if (!state || !supportsDiffSearchContentPreload(state.source) || !diffSearchQuery.trim()) {
       return;
     }
 
@@ -704,6 +725,10 @@ export default function App() {
   useEffect(() => {
     stateRef.current = state;
   }, [state]);
+
+  useEffect(() => {
+    historySourceRef.current = historySource;
+  }, [historySource]);
 
   useEffect(() => {
     sidebarModeRef.current = sidebarMode;
@@ -1062,7 +1087,7 @@ export default function App() {
 
   useEffect(() => {
     const writeCurrentReloadSelection = () => {
-      writeReloadSelection(stateRef.current, selectedPathRef.current);
+      writeReloadSelection(stateRef.current, selectedPathRef.current, historySourceRef.current);
     };
 
     window.addEventListener('beforeunload', writeCurrentReloadSelection);
@@ -1105,7 +1130,7 @@ export default function App() {
           const session = sourceSessionsRef.current.get(getSourceKey(orderedState.source));
           const nextViewed =
             session?.viewed ??
-            (orderedState.source.type === 'working-tree' ? readViewed(orderedState.root) : {});
+            (usesViewedFileState(orderedState.source) ? readViewed(orderedState.root) : {});
           const nextSelectedPath =
             session?.selectedPath &&
             orderedState.files.some((file) => file.path === session.selectedPath)
@@ -1120,12 +1145,7 @@ export default function App() {
             );
 
           setState(orderedState);
-          if (
-            orderedState.source.type === 'pull-request' ||
-            orderedState.source.type === 'branch'
-          ) {
-            setHistorySource(orderedState.source);
-          }
+          setHistorySource(getHistorySource(orderedState.source) ?? historySource);
           setCollapsed(new Set(nextCollapsed));
           setItemVersionByPath({});
           setReviewComments(session?.reviewComments ?? getReviewCommentsFromState(orderedState));
@@ -1147,7 +1167,7 @@ export default function App() {
           }
         });
     },
-    [pendingSource, saveCurrentSourceSession],
+    [historySource, pendingSource, saveCurrentSourceSession],
   );
 
   const resizeSidebar = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
@@ -1921,6 +1941,7 @@ export default function App() {
   const sidebarLabel = `${compactPath(state.root)}${state.branch ? ` (${state.branch})` : ''}`;
   const sidebarSourceLabel =
     state.source.type !== 'working-tree' ? ` · ${getSourceLabel(state.source)}` : '';
+  const emptySourceDetail = getEmptySourceDetail(state.source, state.root);
 
   const showNarrativeWalkthrough = narrativeWalkthrough != null && sidebarMode === 'walkthrough';
   const plainCommitModel = narrativeNavigation.orderView
@@ -2089,7 +2110,7 @@ export default function App() {
           </div>
         </div>
         <Sidebar
-          branchSource={historySource?.type === 'branch' ? historySource : null}
+          branchSource={historySource?.type === 'branch-diff' ? historySource : null}
           commitFiles={state.files}
           currentSource={pendingSource ?? state.source}
           files={visibleFiles}
@@ -2154,21 +2175,13 @@ export default function App() {
         ) : state.files.length === 0 ? (
           <div className="empty-state">
             <div className="empty-panel squircle">
-              <strong>
-                {state.source.type === 'commit'
-                  ? 'No changes in commit'
-                  : state.source.type === 'branch'
-                    ? 'Branch history'
-                    : 'No local changes'}
-              </strong>
-              {state.source.type === 'commit' ? (
-                <span>{getShortRef(state.source.ref)}</span>
-              ) : state.source.type === 'branch' ? (
-                <span>{state.source.ref}</span>
-              ) : (
-                <code className="walkthrough-inline-code" title={state.root}>
-                  {compactPath(state.root)}
+              <strong>{getEmptySourceTitle(state.source)}</strong>
+              {emptySourceDetail.kind === 'code' ? (
+                <code className="walkthrough-inline-code" title={emptySourceDetail.title}>
+                  {emptySourceDetail.text}
                 </code>
+              ) : (
+                <span>{emptySourceDetail.text}</span>
               )}
             </div>
           </div>

@@ -52,7 +52,7 @@ export function Sidebar({
   walkthroughLoading,
   walkthroughUnread,
 }: {
-  branchSource: Extract<ReviewSource, { type: 'branch' }> | null;
+  branchSource: Extract<ReviewSource, { type: 'branch-diff' }> | null;
   commitFiles: ReadonlyArray<ChangedFile>;
   currentSource: ReviewSource;
   files: ReadonlyArray<ChangedFile>;
@@ -458,7 +458,7 @@ function HistorySidebar({
   pullRequestSource,
   searchQuery,
 }: {
-  branchSource: Extract<ReviewSource, { type: 'branch' }> | null;
+  branchSource: Extract<ReviewSource, { type: 'branch-diff' }> | null;
   currentSource: ReviewSource;
   entries: ReadonlyArray<HistoryEntry>;
   hasMore: boolean;
@@ -525,14 +525,40 @@ function HistorySidebar({
       return [
         !normalizedQuery
           ? {
+              key: 'history-section:review-scope',
+              kind: 'section' as const,
+              label: 'Review scope',
+            }
+          : null,
+        !normalizedQuery
+          ? {
+              author: null,
+              committedAt: null,
+              gravatarUrl: undefined,
+              key: 'working-tree',
+              kind: 'entry' as const,
+              ref: '',
+              source: { type: 'working-tree' } satisfies ReviewSource,
+              subject: 'Uncommitted changes',
+            }
+          : null,
+        !normalizedQuery
+          ? {
               author: null,
               committedAt: null,
               gravatarUrl: undefined,
               key: getSourceKey(branchSource),
               kind: 'entry' as const,
-              ref: branchSource.ref,
+              ref: 'branch',
               source: branchSource satisfies ReviewSource,
-              subject: 'Branch history',
+              subject: `Branch diff vs ${branchSource.ref}`,
+            }
+          : null,
+        localRows.length > 0
+          ? {
+              key: 'history-section:branch',
+              kind: 'section' as const,
+              label: 'Branch history',
             }
           : null,
         ...localRows,
@@ -550,7 +576,7 @@ function HistorySidebar({
             kind: 'entry' as const,
             ref: '',
             source: { type: 'working-tree' } satisfies ReviewSource,
-            subject: 'Uncommitted',
+            subject: 'Uncommitted changes',
           }
         : null,
       ...localRows,
@@ -591,7 +617,7 @@ function HistorySidebar({
             <span className="history-entry-ref">
               {row.source.type === 'commit'
                 ? getShortRef(row.source.ref)
-                : row.source.type === 'pull-request' || row.source.type === 'branch'
+                : row.source.type === 'pull-request' || row.source.type === 'branch-diff'
                   ? row.ref
                   : 'local'}
             </span>
