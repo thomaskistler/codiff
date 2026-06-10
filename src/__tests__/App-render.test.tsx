@@ -1320,3 +1320,78 @@ test('walkthrough launch errors stay on the walkthrough tab without automatic re
     container.remove();
   }
 });
+
+test('history filter matches commits by author name', async () => {
+  window.codiff = createCodiffMock({
+    getRepositoryHistory: vi.fn(async () => ({
+      entries: [
+        {
+          author: 'Ada Lovelace',
+          committedAt: Date.now(),
+          parents: [],
+          ref: 'aaa1111',
+          subject: 'Fix parser',
+        },
+        {
+          author: 'Grace Hopper',
+          committedAt: Date.now(),
+          parents: [],
+          ref: 'bbb2222',
+          subject: 'Update docs',
+        },
+      ],
+      root: '/repo',
+    })),
+  });
+
+  const container = document.createElement('div');
+  document.body.append(container);
+  let root: Root | null = null;
+
+  const findButton = (label: string) =>
+    Array.from(container.querySelectorAll('button')).find((button) =>
+      button.textContent?.includes(label),
+    );
+  const historySubjects = () =>
+    Array.from(container.querySelectorAll('.history-entry-subject')).map(
+      (element) => element.textContent,
+    );
+
+  try {
+    await act(async () => {
+      root = createRoot(container);
+      root.render(<App />);
+    });
+
+    await waitFor(() => {
+      expect(container.querySelector('.loading')).toBeNull();
+    });
+
+    await act(async () => {
+      findButton('History')?.click();
+    });
+
+    await waitFor(() => {
+      expect(historySubjects()).toContain('Fix parser');
+      expect(historySubjects()).toContain('Update docs');
+    });
+
+    const searchInput = container.querySelector<HTMLInputElement>('.sidebar-search');
+    expect(searchInput).toBeTruthy();
+    const setInputValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
+    await act(async () => {
+      setInputValue?.call(searchInput, 'grace');
+      searchInput?.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+
+    await waitFor(() => {
+      expect(historySubjects()).toContain('Update docs');
+      expect(historySubjects()).not.toContain('Fix parser');
+    });
+  } finally {
+    if (root) {
+      await act(async () => root?.unmount());
+    }
+    container.remove();
+  }
+});

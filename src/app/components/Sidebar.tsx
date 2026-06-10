@@ -530,7 +530,8 @@ function HistorySidebar({
     const matchesQuery = (row: (typeof commitRows)[number]) =>
       !normalizedQuery ||
       row.subject.toLowerCase().includes(normalizedQuery) ||
-      row.ref.toLowerCase().includes(normalizedQuery);
+      row.ref.toLowerCase().includes(normalizedQuery) ||
+      row.author.toLowerCase().includes(normalizedQuery);
 
     if (pullRequestSource) {
       const hasScopedRows = commitRows.some((row) => row.scope != null);
