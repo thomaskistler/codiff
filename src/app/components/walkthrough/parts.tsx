@@ -1,7 +1,7 @@
 import claudeIconUrl from '../../../assets/claude.svg';
 import codexIconUrl from '../../../assets/codex.svg';
 import piIconUrl from '../../../assets/pi.svg';
-import { renderInlineMarkdown } from '../../../lib/markdown.tsx';
+import { renderMarkdown } from '../../../lib/markdown.tsx';
 import { importanceLabel } from '../../../lib/narrative-walkthrough.ts';
 import type { NarrativeWalkthrough, WalkthroughIcon, WalkthroughStop } from '../../../types.ts';
 import { chapterIcons } from './icons.tsx';
@@ -33,7 +33,7 @@ export function WalkthroughLineCount({ added, deleted }: { added: number; delete
 export function Narration({ prose }: { prose: string }) {
   return (
     <div className="wt-narration">
-      <p className="wt-narration-prose">{renderInlineMarkdown(prose)}</p>
+      <div className="wt-narration-prose">{renderMarkdown(prose)}</div>
     </div>
   );
 }

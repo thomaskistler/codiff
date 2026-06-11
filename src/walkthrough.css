@@ -205,7 +205,63 @@
   color: var(--text);
   font: 14px/1.6 var(--font-sans);
   margin: 0;
+}
+.wt-narration-prose p {
+  margin: 0 0 8px;
   text-wrap: pretty;
+}
+.wt-narration-prose p:last-child {
+  margin-bottom: 0;
+}
+.wt-narration-prose h1,
+.wt-narration-prose h2,
+.wt-narration-prose h3,
+.wt-narration-prose h4,
+.wt-narration-prose h5,
+.wt-narration-prose h6 {
+  color: var(--text);
+  font-weight: 700;
+  margin: 0 0 8px;
+}
+.wt-narration-prose h1 {
+  font-size: 1.25em;
+}
+.wt-narration-prose h2 {
+  font-size: 1.1em;
+}
+.wt-narration-prose h3,
+.wt-narration-prose h4,
+.wt-narration-prose h5,
+.wt-narration-prose h6 {
+  font-size: 1em;
+}
+.wt-narration-prose ul,
+.wt-narration-prose ol {
+  margin: 0 0 8px;
+  padding-left: 20px;
+}
+.wt-narration-prose ul {
+  list-style: disc;
+}
+.wt-narration-prose ol {
+  list-style: decimal;
+}
+.wt-narration-prose ul:last-child,
+.wt-narration-prose ol:last-child {
+  margin-bottom: 0;
+}
+.wt-narration-prose li {
+  margin-bottom: 4px;
+  text-wrap: pretty;
+}
+.wt-narration-prose li:last-child {
+  margin-bottom: 0;
+}
+.wt-narration-prose blockquote {
+  border-left: 3px solid var(--file-border);
+  color: var(--muted);
+  margin: 0 0 8px;
+  padding-left: 12px;
 }
 .wt-narration-prose code {
   background: var(--inline-code-bg);

@@ -2,60 +2,36 @@ import { File as CodeFile } from '@pierre/diffs/react';
 import type { ReactNode } from 'react';
 import { markdownCodeBlockOptions } from './code-view-options.ts';
 
-const renderText = (value: string, keyPrefix: string): Array<ReactNode> => {
-  const textNodes: Array<ReactNode> = [];
-  const emphasisPattern =
-    /\*\*([^*\n]+)\*\*|(?<![\w_])_([^_\n]+)_(?![\w_])|(?<![\w*])\*([^*\n]+)\*(?![\w*])/g;
-  let textLastIndex = 0;
-  let emphasisMatch: RegExpExecArray | null;
-
-  while ((emphasisMatch = emphasisPattern.exec(value))) {
-    if (emphasisMatch.index > textLastIndex) {
-      textNodes.push(value.slice(textLastIndex, emphasisMatch.index));
-    }
-
-    if (emphasisMatch[1] != null) {
-      textNodes.push(
-        <strong key={`${keyPrefix}:bold:${emphasisMatch.index}`}>{emphasisMatch[1]}</strong>,
-      );
-    } else {
-      textNodes.push(
-        <em key={`${keyPrefix}:italic:${emphasisMatch.index}`}>
-          {emphasisMatch[2] ?? emphasisMatch[3]}
-        </em>,
-      );
-    }
-    textLastIndex = emphasisPattern.lastIndex;
-  }
-
-  if (textLastIndex < value.length) {
-    textNodes.push(value.slice(textLastIndex));
-  }
-
-  return textNodes.length > 0 ? textNodes : [value];
-};
-
 export const renderInlineMarkdown = (text: string): ReactNode => {
   const nodes: Array<ReactNode> = [];
-  const pattern = /`([^`\n]+)`/g;
+  // Bold is checked before backtick code so **`code`** renders as bold+code rather
+  // than splitting the ** markers across separate text segments.
+  const pattern =
+    /\*\*([^*\n]+)\*\*|`([^`\n]+)`|(?<![\w_])_([^_\n]+)_(?![\w_])|(?<![\w*])\*([^*\n]+)\*(?![\w*])/g;
   let lastIndex = 0;
   let match: RegExpExecArray | null;
 
   while ((match = pattern.exec(text))) {
     if (match.index > lastIndex) {
-      nodes.push(...renderText(text.slice(lastIndex, match.index), `${lastIndex}`));
+      nodes.push(text.slice(lastIndex, match.index));
     }
 
-    nodes.push(
-      <code className="walkthrough-inline-code" key={`${match.index}:${match[1]}`}>
-        {match[1]}
-      </code>,
-    );
+    if (match[1] != null) {
+      nodes.push(<strong key={`b:${match.index}`}>{renderInlineMarkdown(match[1])}</strong>);
+    } else if (match[2] != null) {
+      nodes.push(
+        <code className="walkthrough-inline-code" key={`c:${match.index}:${match[2]}`}>
+          {match[2]}
+        </code>,
+      );
+    } else {
+      nodes.push(<em key={`i:${match.index}`}>{match[3] ?? match[4]}</em>);
+    }
     lastIndex = pattern.lastIndex;
   }
 
   if (lastIndex < text.length) {
-    nodes.push(...renderText(text.slice(lastIndex), `${lastIndex}`));
+    nodes.push(text.slice(lastIndex));
   }
 
   return nodes.length > 0 ? nodes : text;
