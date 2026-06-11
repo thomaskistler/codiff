@@ -473,11 +473,9 @@
 .wt-stop-block-header {
   box-shadow: inset 3px 0 0 rgb(61 135 245 / 0);
   flex: none;
-  margin: 16px auto;
-  max-width: 820px;
+  margin: 16px 0;
   padding: 0 24px;
   transition: box-shadow 220ms ease;
-  width: 100%;
 }
 .wt-stop-block-header.current {
   box-shadow: inset 3px 0 0 var(--tree-selection-focus);
