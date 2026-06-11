@@ -19,6 +19,8 @@ onlyBuiltDependencies:
 overrides:
   vite: 'catalog:'
   vitest: 'catalog:'
+patchedDependencies:
+  '@electron/packager@18.4.4': patches/@electron__packager@18.4.4.patch
 peerDependencyRules:
   allowAny:
     - vite
