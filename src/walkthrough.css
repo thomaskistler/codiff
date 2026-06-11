@@ -482,6 +482,16 @@
 .wt-stop-block-header.current {
   box-shadow: inset 3px 0 0 var(--tree-selection-focus);
 }
+.wt-stop-block-header.wt-prose {
+  box-shadow:
+    inset 3px 0 0 rgb(61 135 245 / 0),
+    6px 18px 80px -54px rgb(0 0 0 / 0.78);
+}
+.wt-stop-block-header.wt-prose.current {
+  box-shadow:
+    inset 3px 0 0 var(--tree-selection-focus),
+    6px 18px 80px -54px rgb(0 0 0 / 0.78);
+}
 
 /* The whole order as one continuous scroll: each stop is a block (narration +
    diff) stacked top-to-bottom, separated by a rule, with the scroll-focused stop

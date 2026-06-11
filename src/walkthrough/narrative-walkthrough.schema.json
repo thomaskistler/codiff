@@ -54,7 +54,7 @@
                     "type": "string"
                   },
                   "maxItems": 14,
-                  "minItems": 1,
+                  "minItems": 0,
                   "type": "array"
                 },
                 "id": {
@@ -91,7 +91,7 @@
                   "type": "string"
                 }
               },
-              "required": ["id", "hunkIds", "importance", "prose"],
+              "required": ["id", "importance", "prose"],
               "type": "object"
             },
             "maxItems": 14,

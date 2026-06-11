@@ -1009,6 +1009,43 @@ test('resolveWalkthroughHunkRuns groups adjacent same-file hunks without reorder
   ]);
 });
 
+test('buildWalkthroughView includes prose-only stops in the sequence with empty hunks', () => {
+  const proseStop = {
+    ...group({ hunks: [], id: 'intro' }),
+    importance: 'normal' as const,
+    prose: 'An architectural overview.',
+  };
+
+  const wt: NarrativeWalkthrough = {
+    ...walkthrough(),
+    chapters: [
+      {
+        blurb: 'Overview.',
+        icon: 'doc' as const,
+        id: 'overview',
+        stops: [proseStop],
+        title: 'Overview',
+      },
+      ...walkthrough().chapters,
+    ],
+  };
+
+  const view = buildWalkthroughView(wt)!;
+
+  expect(view.sequence).toHaveLength(3);
+  expect(view.sequence[0]).toMatchObject({
+    chapterId: 'overview',
+    hunkIds: [],
+    hunks: [],
+    id: 'intro',
+    index: 0,
+  });
+  expect(view.sequence[1].index).toBe(1);
+  expect(view.sequence[2].index).toBe(2);
+  expect(view.chapters[0].stops[0].id).toBe('intro');
+  expect(walkthroughItemPaths(view.sequence[0])).toEqual([]);
+});
+
 test('getWalkthroughRunNote combines header notes for grouped hunks', () => {
   const file = multiHunkFile();
   const section = file.sections[0];

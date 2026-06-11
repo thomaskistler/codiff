@@ -293,6 +293,36 @@ const normalizeChapters = (input, index, coveredHunkIds) => {
         break;
       }
 
+      const rawHunkIds = normalizeStringArray(stop?.hunkIds);
+
+      if (rawHunkIds.length === 0) {
+        const stopId = oneLine(stop?.id) || `${id}-stop-${stops.length + 1}`;
+        if (!stopId || itemIds.has(stopId)) {
+          continue;
+        }
+        const prose = cleanRich(stop?.prose);
+        if (!prose) {
+          continue;
+        }
+        const proseStop = {
+          added: 0,
+          deleted: 0,
+          hunkIds: [],
+          hunks: [],
+          id: stopId,
+          importance: normalizeEnum(stop?.importance, IMPORTANCES, 'normal'),
+          prose,
+        };
+        const title = cleanText(stop?.title);
+        if (title) {
+          proseStop.title = title;
+        }
+        stops.push(proseStop);
+        itemIds.add(stopId);
+        stopCount += 1;
+        continue;
+      }
+
       const group = normalizeHunkGroup(stop, `${id}-stop-${stops.length + 1}`, index);
       if (!group || itemIds.has(group.id)) {
         continue;
@@ -638,6 +668,7 @@ Grouping contract:
 - Split distant same-file hunks into separate consecutive stops when they deserve separate prose. Do not make a chapter-sized stop.
 - Put hunkIds in the exact display order you want Codiff to render. Out-of-line and cross-file order is allowed when it improves reviewer comprehension.
 - Use notes[] on a stop/support item for short per-hunk header notes: each note is { hunkId, body } and hunkId must be one of that item's hunkIds.
+- A stop may omit hunkIds entirely (or set hunkIds: []) to create a prose-only step with no diff panel — use for introductions, architecture context, or documentation. Use sparingly.
 - Do not provide added/deleted counts, status, oldPath, section ids, display labels, path, repo, source, generatedAt, agent, or meta; Codiff computes those.
 - Put secondary, mechanical, docs-only, or repeated-pattern hunks in support[], grouped by reason.
 - For working-tree sources, include commit.title and commit.body by default unless there are no commit-worthy files. Put the subject line in commit.title, not as the first line of commit.body.

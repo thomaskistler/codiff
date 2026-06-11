@@ -149,7 +149,7 @@ test('derives an OpenAI strict-compatible response schema', () => {
   expect(stopProperties.status).toBeUndefined();
   expect(stopProperties.changeType.type).toContain('null');
   expect(stopProperties.changeType.enum).toContain(null);
-  expect(stopProperties.hunkIds.minItems).toBe(1);
+  expect(stopProperties.hunkIds.minItems).toBe(0);
   expect(stopProperties.hunkIds.maxItems).toBe(14);
   expect(stopProperties.notes.items.required).toEqual(['body', 'hunkId']);
   expect(stopProperties.comments).toBeUndefined();
@@ -737,4 +737,166 @@ test('strips the commit composer when the source is not a working tree', () => {
   });
 
   expect(result.commit).toBeUndefined();
+});
+
+test('accepts a stop with no hunkIds as a prose-only stop', () => {
+  const input = {
+    ...baseInput(),
+    chapters: [
+      {
+        ...baseInput().chapters[0],
+        stops: [
+          {
+            id: 'intro',
+            importance: 'normal',
+            prose: 'An architectural overview of the fix.',
+          },
+          ...baseInput().chapters[0].stops,
+        ],
+      },
+    ],
+  };
+
+  const result = normalizeNarrativeWalkthrough(input, files);
+
+  expect(result.chapters[0].stops).toHaveLength(3);
+  expect(result.chapters[0].stops[0]).toMatchObject({
+    added: 0,
+    deleted: 0,
+    hunkIds: [],
+    hunks: [],
+    id: 'intro',
+    importance: 'normal',
+    prose: 'An architectural overview of the fix.',
+  });
+  expect(result.meta).toBe('3 stops · 1 chapters');
+});
+
+test('accepts a stop with hunkIds: [] as a prose-only stop', () => {
+  const input = {
+    ...baseInput(),
+    chapters: [
+      {
+        ...baseInput().chapters[0],
+        stops: [
+          {
+            hunkIds: [],
+            id: 'intro',
+            importance: 'normal',
+            prose: 'Background context.',
+          },
+          ...baseInput().chapters[0].stops,
+        ],
+      },
+    ],
+  };
+
+  const result = normalizeNarrativeWalkthrough(input, files);
+
+  expect(result.chapters[0].stops[0]).toMatchObject({
+    hunkIds: [],
+    hunks: [],
+    id: 'intro',
+  });
+  expect(result.chapters[0].stops).toHaveLength(3);
+});
+
+test('preserves title on a prose-only stop', () => {
+  const input = {
+    ...baseInput(),
+    chapters: [
+      {
+        ...baseInput().chapters[0],
+        stops: [
+          {
+            id: 'intro',
+            importance: 'context',
+            prose: 'Context.',
+            title: 'Overview',
+          },
+          ...baseInput().chapters[0].stops,
+        ],
+      },
+    ],
+  };
+
+  const result = normalizeNarrativeWalkthrough(input, files);
+
+  expect(result.chapters[0].stops[0].title).toBe('Overview');
+});
+
+test('drops a prose-only stop that has no prose', () => {
+  const input = {
+    ...baseInput(),
+    chapters: [
+      {
+        ...baseInput().chapters[0],
+        stops: [{ id: 'empty', importance: 'normal', prose: '' }, ...baseInput().chapters[0].stops],
+      },
+    ],
+  };
+
+  const result = normalizeNarrativeWalkthrough(input, files);
+
+  expect(result.chapters[0].stops.map((s: any) => s.id)).not.toContain('empty');
+  expect(result.chapters[0].stops).toHaveLength(2);
+});
+
+test('drops the second of two prose-only stops with the same id', () => {
+  const input = {
+    ...baseInput(),
+    chapters: [
+      {
+        ...baseInput().chapters[0],
+        stops: [
+          { id: 'intro', importance: 'normal', prose: 'First.' },
+          { id: 'intro', importance: 'normal', prose: 'Duplicate.' },
+          ...baseInput().chapters[0].stops,
+        ],
+      },
+    ],
+  };
+
+  const result = normalizeNarrativeWalkthrough(input, files);
+
+  const introStops = result.chapters[0].stops.filter((s: any) => s.id === 'intro');
+  expect(introStops).toHaveLength(1);
+  expect(introStops[0].prose).toBe('First.');
+});
+
+test('normalizes a walkthrough composed entirely of prose-only stops', () => {
+  const input = {
+    chapters: [
+      {
+        blurb: 'High-level context.',
+        icon: 'doc',
+        id: 'context',
+        stops: [
+          {
+            id: 'overview',
+            importance: 'normal',
+            prose: 'This change fixes the ordering bug described in the issue.',
+          },
+          {
+            id: 'approach',
+            importance: 'context',
+            prose: 'The fix reorders the hunk traversal to respect collapsed state.',
+          },
+        ],
+        title: 'Context',
+      },
+    ],
+    focus: 'Prose-only walkthrough.',
+    kind: 'narrative',
+    support: [],
+    title: 'All prose',
+    version: 4,
+  };
+
+  const result = normalizeNarrativeWalkthrough(input, files);
+
+  expect(result.chapters).toHaveLength(1);
+  expect(result.chapters[0].stops).toHaveLength(2);
+  expect(result.chapters[0].stops.every((s: any) => s.hunkIds.length === 0)).toBe(true);
+  expect(result.meta).toBe('2 stops · 1 chapters');
 });

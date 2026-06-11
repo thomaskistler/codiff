@@ -76,10 +76,11 @@ const narrativeWalkthroughSchema = {
               additionalProperties: false,
               properties: {
                 ...hunkGroupProperties,
+                hunkIds: { ...hunkGroupProperties.hunkIds, minItems: 0 },
                 importance: { enum: [...IMPORTANCES], type: 'string' },
                 prose: { type: 'string' },
               },
-              required: ['id', 'hunkIds', 'importance', 'prose'],
+              required: ['id', 'importance', 'prose'],
               type: 'object',
             },
             maxItems: MAX_WALKTHROUGH_STOPS,
