@@ -56,7 +56,6 @@ function TocStop({
   visited: boolean;
 }) {
   const isDone = visited && !current;
-  const files = formatWalkthroughFileLineRows(stop.hunks);
   const title = stop.title ?? walkthroughItemTitleFallback(stop);
   return (
     <button
@@ -81,7 +80,9 @@ function TocStop({
           <span className="wt-toc-num">{stop.index + 1}</span>
           <span className="wt-toc-title">{title}</span>
         </span>
-        <TocFileRows files={files} />
+        {stop.hunks.length > 0 ? (
+          <TocFileRows files={formatWalkthroughFileLineRows(stop.hunks)} />
+        ) : null}
       </span>
     </button>
   );

@@ -107,8 +107,11 @@ const emptyWalkthroughBlockSet: WalkthroughBlockSet = {
 };
 
 function StopHeader({ current, stop }: { current: boolean; stop: WalkthroughStopView }) {
+  const isProse = stop.hunkIds.length === 0;
   return (
-    <div className={`wt-stop-block wt-stop-block-header${current ? ' current' : ''}`}>
+    <div
+      className={`wt-stop-block wt-stop-block-header${current ? ' current' : ''}${isProse ? ' wt-prose' : ''}`}
+    >
       <div className="wt-stage-title-row">
         <h2 className="wt-stage-title">{stop.title ?? walkthroughItemTitleFallback(stop)}</h2>
         <ImportancePill importance={stop.importance} />
@@ -142,7 +145,8 @@ const createWalkthroughBlocks = (
   for (const stop of walkthroughView.sequence) {
     const focusedRuns = getFocusedRunDiffs(stop, files);
     if (focusedRuns.length === 0) {
-      const blockId = `walkthrough:${stop.id}:missing`;
+      const isProse = stop.hunkIds.length === 0;
+      const blockId = `walkthrough:${stop.id}:${isProse ? 'prose' : 'missing'}`;
       firstBlockIdByStop[stop.index] = blockId;
       stopIndexByBlockId.set(blockId, stop.index);
       blocks.push({
@@ -657,9 +661,11 @@ export function NarrativeWalkthroughView({
                 {next.title ?? walkthroughItemTitleFallback(next)}
               </span>
             </span>
-            <span className="wt-upnext-file">
-              {walkthroughFileName(walkthroughItemPaths(next)[0] ?? '')}
-            </span>
+            {walkthroughItemPaths(next).length > 0 ? (
+              <span className="wt-upnext-file">
+                {walkthroughFileName(walkthroughItemPaths(next)[0])}
+              </span>
+            ) : null}
             <ArrowRight size={17} />
           </span>
         </button>
