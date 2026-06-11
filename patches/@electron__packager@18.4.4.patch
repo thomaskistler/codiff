@@ -1,0 +1,22 @@
+diff --git a/dist/unzip.js b/dist/unzip.js
+index d37e170f51f910e97c44fdcca9775244ca7039d4..ce34d85e8d0811a9d9dfa1d6856b45598da0a413 100644
+--- a/dist/unzip.js
++++ b/dist/unzip.js
+@@ -1,12 +1,10 @@
+ "use strict";
+-var __importDefault = (this && this.__importDefault) || function (mod) {
+-    return (mod && mod.__esModule) ? mod : { "default": mod };
+-};
+-Object.defineProperty(exports, "__esModule", { value: true });
+-exports.extractElectronZip = void 0;
+-const extract_zip_1 = __importDefault(require("extract-zip"));
++const { execFile } = require('child_process');
++const { promisify } = require('util');
++const execFileAsync = promisify(execFile);
++
+ async function extractElectronZip(zipPath, targetDir) {
+-    await (0, extract_zip_1.default)(zipPath, { dir: targetDir });
++    await execFileAsync('unzip', ['-q', zipPath, '-d', targetDir]);
+ }
+ exports.extractElectronZip = extractElectronZip;
+ //# sourceMappingURL=unzip.js.map

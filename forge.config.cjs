@@ -21,6 +21,16 @@ const osxNotarize =
         tool: 'notarytool',
       }
     : undefined;
+const osxSign = process.env.APPLE_SIGNING_IDENTITY
+  ? {
+      continueOnError: false,
+      hardenedRuntime: true,
+      identity: process.env.APPLE_SIGNING_IDENTITY,
+      optionsForFile: () => ({
+        entitlements: entitlementsPath,
+      }),
+    }
+  : undefined;
 
 /**
  * @typedef {import('@electron-forge/shared-types').ForgeArch} ForgeArch
@@ -108,14 +118,7 @@ module.exports = {
     ],
     name: 'Codiff',
     ...(osxNotarize ? { osxNotarize } : {}),
-    osxSign: {
-      continueOnError: false,
-      hardenedRuntime: true,
-      identity: process.env.APPLE_SIGNING_IDENTITY,
-      optionsForFile: () => ({
-        entitlements: entitlementsPath,
-      }),
-    },
+    ...(osxSign ? { osxSign } : {}),
     protocols: [
       {
         name: 'Codiff',
