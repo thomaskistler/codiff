@@ -197,6 +197,16 @@ export const renderMarkdown = (
       const blockEndIndex = blockStartIndex + block.length - 1;
       const className = getBlockClassName(isAddedSourceRange(blockStartIndex, blockEndIndex));
       const lines = block.split('\n');
+      // If the first line is a heading but more lines follow (no blank line before them),
+      // emit the heading now and recurse on the remainder as a new block.
+      if (lines.length > 1) {
+        const firstLineHeading = lines[0]?.match(/^(#{1,6})\s+(.+)$/);
+        if (firstLineHeading) {
+          renderTextBlock(lines[0], rawBlockOffset);
+          renderTextBlock(lines.slice(1).join('\n'), rawBlockOffset + lines[0].length + 1);
+          return;
+        }
+      }
       const heading = lines.length === 1 ? lines[0]?.match(/^(#{1,6})\s+(.+)$/) : null;
       const listItems = lines
         .map((line) => line.trim().match(/^[-*]\s+(.+)$/)?.[1])

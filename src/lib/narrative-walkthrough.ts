@@ -10,7 +10,7 @@ import type {
   WalkthroughChangeType,
   WalkthroughChapter,
   WalkthroughHunk,
-  WalkthroughHunkGroup,
+  WalkthroughHunkBlock,
   WalkthroughIcon,
   WalkthroughSupportGroup,
   WalkthroughStop,
@@ -74,11 +74,15 @@ const uniquePaths = (paths: ReadonlyArray<string>): ReadonlyArray<string> => {
   return unique;
 };
 
-export const walkthroughItemPaths = (item: WalkthroughHunkGroup): ReadonlyArray<string> =>
-  uniquePaths(item.hunks.map((hunk) => hunk.path));
+export const walkthroughItemPaths = (
+  item: WalkthroughStop | WalkthroughSupportGroup,
+): ReadonlyArray<string> =>
+  uniquePaths(
+    item.blocks.filter((b): b is WalkthroughHunkBlock => b.type === 'hunk').map((b) => b.hunk.path),
+  );
 
-export const walkthroughItemTitleFallback = (item: WalkthroughHunkGroup): string =>
-  item.title ?? walkthroughFileName(item.hunks[0]?.path ?? item.id);
+export const walkthroughItemTitleFallback = (stop: WalkthroughStop): string =>
+  walkthroughFileName(walkthroughItemPaths(stop)[0] ?? '') || stop.id;
 
 export const formatWalkthroughFileList = (
   paths: ReadonlyArray<string>,
@@ -142,24 +146,30 @@ export const formatWalkthroughFileLineRows = (
 };
 
 const walkthroughCoveredHunkIds = (view: WalkthroughView): ReadonlySet<string> =>
-  new Set([...view.sequence, ...view.support].flatMap((item) => item.hunkIds));
+  new Set(
+    [...view.sequence, ...view.support].flatMap((item) =>
+      item.blocks.filter((b): b is WalkthroughHunkBlock => b.type === 'hunk').map((b) => b.hunk.id),
+    ),
+  );
 
 const walkthroughCoveredSectionIds = (view: WalkthroughView): ReadonlySet<string> =>
   new Set(
     [...view.sequence, ...view.support].flatMap((item) =>
-      item.hunks
-        .map((hunk) => hunk.anchor.sectionId)
-        .filter((sectionId): sectionId is string => typeof sectionId === 'string'),
+      item.blocks
+        .filter((b): b is WalkthroughHunkBlock => b.type === 'hunk')
+        .map((b) => b.hunk.anchor.sectionId)
+        .filter((id): id is string => typeof id === 'string'),
     ),
   );
 
 const walkthroughCoveredSyntheticSectionIds = (view: WalkthroughView): ReadonlySet<string> =>
   new Set(
     [...view.sequence, ...view.support].flatMap((item) =>
-      item.hunks
-        .filter(isSyntheticWalkthroughHunk)
-        .map((hunk) => hunk.anchor.sectionId)
-        .filter((sectionId): sectionId is string => typeof sectionId === 'string'),
+      item.blocks
+        .filter((b): b is WalkthroughHunkBlock => b.type === 'hunk')
+        .filter((b) => isSyntheticWalkthroughHunk(b.hunk))
+        .map((b) => b.hunk.anchor.sectionId)
+        .filter((id): id is string => typeof id === 'string'),
     ),
   );
 
@@ -306,12 +316,6 @@ export type ResolvedWalkthroughHunkFile = {
   section: DiffSection;
 };
 
-export type WalkthroughHunkRun = {
-  hunks: ReadonlyArray<WalkthroughHunk>;
-  key: string;
-  resolved: ResolvedWalkthroughHunkFile;
-};
-
 /** Resolve one normalized hunk to its exact live `ChangedFile` and `DiffSection`. */
 export const resolveWalkthroughHunkFile = (
   hunk: WalkthroughHunk,
@@ -330,54 +334,6 @@ export const resolveWalkthroughHunkFile = (
   }
 
   return { file, section };
-};
-
-const walkthroughHunkRunKey = (item: WalkthroughHunkGroup, hunks: ReadonlyArray<WalkthroughHunk>) =>
-  `${item.id}:${hunks.map((hunk) => hunk.id).join(',')}`;
-
-/** Resolve item hunks in authored order, coalescing adjacent hunks from the same file section. */
-export const resolveWalkthroughHunkRuns = (
-  item: WalkthroughHunkGroup,
-  files: ReadonlyArray<ChangedFile>,
-): ReadonlyArray<WalkthroughHunkRun> => {
-  const runs: Array<WalkthroughHunkRun> = [];
-  for (const hunk of item.hunks) {
-    const resolved = resolveWalkthroughHunkFile(hunk, files);
-    if (!resolved) {
-      continue;
-    }
-    const previous = runs.at(-1);
-    if (
-      previous &&
-      previous.resolved.file.path === resolved.file.path &&
-      previous.resolved.section.id === resolved.section.id
-    ) {
-      const hunks = [...previous.hunks, hunk];
-      runs[runs.length - 1] = {
-        ...previous,
-        hunks,
-        key: walkthroughHunkRunKey(item, hunks),
-      };
-    } else {
-      runs.push({
-        hunks: [hunk],
-        key: walkthroughHunkRunKey(item, [hunk]),
-        resolved,
-      });
-    }
-  }
-  return runs;
-};
-
-export const getWalkthroughRunNote = (
-  item: WalkthroughHunkGroup,
-  run: WalkthroughHunkRun,
-): string | undefined => {
-  const hunkIds = new Set(run.hunks.map((hunk) => hunk.id));
-  const notes = (item.notes ?? [])
-    .filter((note) => hunkIds.has(note.hunkId))
-    .map((note) => note.body);
-  return notes.length > 0 ? notes.join(' ') : undefined;
 };
 
 const focusSignature = (section: DiffSection, hunkIds: ReadonlyArray<string>) =>
@@ -571,8 +527,12 @@ export const buildCommitModel = (
   changedFiles: ReadonlyArray<ChangedFile> = [],
 ): CommitModel => {
   const totalsByPath = new Map<string, NarrativeLineCount>();
-  const addTotals = (item: WalkthroughHunkGroup) => {
-    for (const hunk of item.hunks) {
+  const addTotals = (item: WalkthroughStop | WalkthroughSupportGroup) => {
+    for (const block of item.blocks) {
+      if (block.type !== 'hunk') {
+        continue;
+      }
+      const hunk = block.hunk;
       const current = totalsByPath.get(hunk.path) ?? { added: 0, deleted: 0 };
       totalsByPath.set(hunk.path, {
         added: current.added + hunk.added,
@@ -588,15 +548,16 @@ export const buildCommitModel = (
   }
 
   const seen = new Set<string>();
-  const toFile = (item: WalkthroughHunkGroup, path: string): CommitFile => {
+  const toFile = (item: WalkthroughStop | WalkthroughSupportGroup, path: string): CommitFile => {
     const totals = totalsByPath.get(path) ?? { added: 0, deleted: 0 };
+    const isStop = 'importance' in item;
     return {
       added: totals.added,
-      changeType: item.changeType,
+      changeType: isStop ? item.changeType : undefined,
       deleted: totals.deleted,
       itemId: item.id,
       name: walkthroughFileName(path),
-      note: item.commitNote ?? item.summary,
+      note: isStop ? (item.commitNote ?? item.summary) : item.reason,
       path,
     };
   };

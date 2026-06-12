@@ -16,7 +16,7 @@ const {
   CHANGE_TYPES,
   ICONS,
   IMPORTANCES,
-  MAX_HUNKS_PER_WALKTHROUGH_GROUP,
+  MAX_BLOCKS_PER_STOP,
   MAX_WALKTHROUGH_CHAPTERS,
   MAX_WALKTHROUGH_STOPS,
   narrativeWalkthroughResponseSchema,
@@ -85,18 +85,6 @@ const stripLeadingCommitTitle = (body, title) => {
 };
 
 /** @param {unknown} value */
-const normalizeStringArray = (value) => {
-  const strings = [];
-  for (const item of Array.isArray(value) ? value : []) {
-    const text = oneLine(item);
-    if (text && !strings.includes(text)) {
-      strings.push(text);
-    }
-  }
-  return strings;
-};
-
-/** @param {unknown} value */
 const normalizeGeneratedAt = (value) => {
   if (typeof value === 'string' && value.trim()) {
     return value.trim();
@@ -143,18 +131,6 @@ const indexFiles = (files) => {
   return { hunkById };
 };
 
-const resolveHunks = (hunkIds, index) => {
-  const hunks = [];
-  for (const hunkId of hunkIds) {
-    const hunk = index.hunkById.get(hunkId);
-    if (!hunk) {
-      return null;
-    }
-    hunks.push(hunk);
-  }
-  return hunks;
-};
-
 const normalizeAnchor = (hunk) => {
   const path = hunk.path;
   const side = defaultSideForStatus(hunk.status);
@@ -199,78 +175,55 @@ const normalizeHunk = (hunk) => {
   return normalized;
 };
 
-/** @param {any} note @param {ReadonlySet<string>} hunkIds */
-const normalizeHunkNote = (note, hunkIds) => {
-  const hunkId = oneLine(note?.hunkId);
-  const body = cleanText(note?.body);
-  if (!hunkId || !body || !hunkIds.has(hunkId)) {
-    return null;
-  }
-  return { body, hunkId };
-};
+/**
+ * Normalize one block from author input.
+ * For 'hunk' blocks, marks the hunkId as covered in coveredHunkIds.
+ * Returns null if the block is invalid or unresolvable.
+ */
+const normalizeBlock = (block, index, walkthroughDir, coveredHunkIds) => {
+  const blockType = oneLine(block?.type);
 
-/** @param {any} item @param {string} fallbackId @param {ReturnType<typeof indexFiles>} index */
-const normalizeHunkGroup = (item, fallbackId, index) => {
-  const id = oneLine(item?.id) || fallbackId;
-  const hunkIds = normalizeStringArray(item?.hunkIds);
-  if (!id || hunkIds.length === 0 || hunkIds.length > MAX_HUNKS_PER_WALKTHROUGH_GROUP) {
-    return null;
+  if (blockType === 'markup') {
+    const prose = cleanRich(block?.prose);
+    return prose ? { prose, type: 'markup' } : null;
   }
 
-  const selectedHunks = resolveHunks(hunkIds, index);
-  if (!selectedHunks || selectedHunks.length !== hunkIds.length) {
-    return null;
-  }
-
-  const lineCount = sumHunkLineCounts(selectedHunks);
-  const selectedHunkIds = new Set(selectedHunks.map((hunk) => hunk.id));
-
-  /** @type {Record<string, unknown>} */
-  const normalized = {
-    added: lineCount.added,
-    deleted: lineCount.deleted,
-    hunkIds: selectedHunks.map((hunk) => hunk.id),
-    hunks: selectedHunks.map(normalizeHunk),
-    id,
-  };
-
-  const title = cleanText(item?.title);
-  if (title) {
-    normalized.title = title;
-  }
-  const summary = cleanText(item?.summary);
-  if (summary) {
-    normalized.summary = summary;
-  }
-  const changeType = normalizeEnum(item?.changeType, CHANGE_TYPES, undefined);
-  if (changeType) {
-    normalized.changeType = changeType;
-  }
-  const commitNote = cleanText(item?.commitNote);
-  if (commitNote) {
-    normalized.commitNote = commitNote;
-  }
-
-  const notes = [];
-  const notedHunkIds = new Set();
-  for (const note of Array.isArray(item?.notes) ? item.notes : []) {
-    const normalizedNote = normalizeHunkNote(note, selectedHunkIds);
-    if (!normalizedNote || notedHunkIds.has(normalizedNote.hunkId)) {
-      continue;
+  if (blockType === 'hunk') {
+    const hunkId = oneLine(block?.hunkId);
+    if (!hunkId || coveredHunkIds.has(hunkId)) {
+      return null;
     }
-    notes.push(normalizedNote);
-    notedHunkIds.add(normalizedNote.hunkId);
-  }
-  if (notes.length > 0) {
-    normalized.notes = notes;
+    const rawHunk = index.hunkById.get(hunkId);
+    if (!rawHunk) {
+      return null;
+    }
+    const hunkBlock = { hunk: normalizeHunk(rawHunk), type: 'hunk' };
+    const note = cleanText(block?.note);
+    if (note) {
+      hunkBlock.note = note;
+    }
+    coveredHunkIds.add(hunkId);
+    return hunkBlock;
   }
 
-  return normalized;
+  if (blockType === 'html') {
+    const html = cleanRich(block?.html);
+    const htmlFileRaw = cleanText(block?.htmlFile);
+    let resolvedHtml = html;
+    if (!resolvedHtml && htmlFileRaw && walkthroughDir) {
+      try {
+        resolvedHtml = readFileSync(join(walkthroughDir, htmlFileRaw), 'utf8');
+      } catch {
+        // unresolvable
+      }
+    }
+    return resolvedHtml ? { html: resolvedHtml, type: 'html' } : null;
+  }
+
+  return null;
 };
 
-const hunkGroupKey = (group) => (group.hunkIds || []).join('\n');
-
-const normalizeChapters = (input, index, coveredHunkIds) => {
+const normalizeChapters = (input, index, coveredHunkIds, walkthroughDir) => {
   const chapters = [];
   const chapterIds = new Set();
   const itemIds = new Set();
@@ -287,67 +240,58 @@ const normalizeChapters = (input, index, coveredHunkIds) => {
     }
 
     const stops = [];
-    const seenStopHunkGroups = new Set();
     for (const stop of Array.isArray(chapter?.stops) ? chapter.stops : []) {
       if (stopCount >= MAX_WALKTHROUGH_STOPS) {
         break;
       }
 
-      const rawHunkIds = normalizeStringArray(stop?.hunkIds);
+      const stopId = oneLine(stop?.id) || `${id}-stop-${stops.length + 1}`;
+      if (!stopId || itemIds.has(stopId)) {
+        continue;
+      }
 
-      if (rawHunkIds.length === 0) {
-        const stopId = oneLine(stop?.id) || `${id}-stop-${stops.length + 1}`;
-        if (!stopId || itemIds.has(stopId)) {
-          continue;
+      const rawBlocks = Array.isArray(stop?.blocks) ? stop.blocks : [];
+      const blocks = [];
+      for (const block of rawBlocks) {
+        if (blocks.length >= MAX_BLOCKS_PER_STOP) {
+          break;
         }
-        const prose = cleanRich(stop?.prose);
-        if (!prose) {
-          continue;
+        const normalized = normalizeBlock(block, index, walkthroughDir, coveredHunkIds);
+        if (normalized) {
+          blocks.push(normalized);
         }
-        const proseStop = {
-          added: 0,
-          deleted: 0,
-          hunkIds: [],
-          hunks: [],
-          id: stopId,
-          importance: normalizeEnum(stop?.importance, IMPORTANCES, 'normal'),
-          prose,
-        };
-        const title = cleanText(stop?.title);
-        if (title) {
-          proseStop.title = title;
-        }
-        stops.push(proseStop);
-        itemIds.add(stopId);
-        stopCount += 1;
+      }
+
+      if (blocks.length === 0) {
         continue;
       }
 
-      const group = normalizeHunkGroup(stop, `${id}-stop-${stops.length + 1}`, index);
-      if (!group || itemIds.has(group.id)) {
-        continue;
+      const normalizedStop = {
+        blocks,
+        id: stopId,
+        importance: normalizeEnum(stop?.importance, IMPORTANCES, 'normal'),
+      };
+
+      const title = cleanText(stop?.title);
+      if (title) {
+        normalizedStop.title = title;
+      }
+      const summary = cleanText(stop?.summary);
+      if (summary) {
+        normalizedStop.summary = summary;
+      }
+      const changeType = normalizeEnum(stop?.changeType, CHANGE_TYPES, undefined);
+      if (changeType) {
+        normalizedStop.changeType = changeType;
+      }
+      const commitNote = cleanText(stop?.commitNote);
+      if (commitNote) {
+        normalizedStop.commitNote = commitNote;
       }
 
-      const key = hunkGroupKey(group);
-      const overlapsCoveredHunk = group.hunkIds.some((hunkId) => coveredHunkIds.has(hunkId));
-      if (seenStopHunkGroups.has(key) || overlapsCoveredHunk) {
-        continue;
-      }
-
-      const prose = cleanRich(stop?.prose);
-      if (!prose) {
-        continue;
-      }
-
-      group.importance = normalizeEnum(stop?.importance, IMPORTANCES, 'normal');
-      group.prose = prose;
-      stops.push(group);
-      itemIds.add(group.id);
-      seenStopHunkGroups.add(key);
+      stops.push(normalizedStop);
+      itemIds.add(stopId);
       stopCount += 1;
-      for (const hunkId of group.hunkIds) {
-        coveredHunkIds.add(hunkId);
-      }
     }
 
     if (stops.length === 0) {
@@ -367,35 +311,39 @@ const normalizeChapters = (input, index, coveredHunkIds) => {
   return { chapters, itemIds, stopCount };
 };
 
-const normalizeAuthoredSupport = (input, index, coveredHunkIds, itemIds) => {
+const normalizeAuthoredSupport = (input, index, coveredHunkIds, itemIds, walkthroughDir) => {
   const support = [];
-  const seenSupportHunkGroups = new Set();
+
   for (const item of Array.isArray(input?.support) ? input.support : []) {
-    const group = normalizeHunkGroup(item, `support-${support.length + 1}`, index);
-    if (!group || itemIds.has(group.id)) {
+    const id = oneLine(item?.id) || `support-${support.length + 1}`;
+    if (!id || itemIds.has(id)) {
       continue;
     }
 
-    const key = hunkGroupKey(group);
-    if (
-      seenSupportHunkGroups.has(key) ||
-      group.hunkIds.some((hunkId) => coveredHunkIds.has(hunkId))
-    ) {
+    const rawBlocks = Array.isArray(item?.blocks) ? item.blocks : [];
+    const blocks = [];
+    for (const block of rawBlocks) {
+      if (blocks.length >= MAX_BLOCKS_PER_STOP) {
+        break;
+      }
+      const normalized = normalizeBlock(block, index, walkthroughDir, coveredHunkIds);
+      if (normalized) {
+        blocks.push(normalized);
+      }
+    }
+
+    if (blocks.length === 0) {
       continue;
     }
 
-    group.reason = cleanText(item?.reason, 'Other changes');
-    const note = cleanText(item?.note);
-    if (note) {
-      group.note = note;
-    }
-    support.push(group);
-    itemIds.add(group.id);
-    seenSupportHunkGroups.add(key);
-    for (const hunkId of group.hunkIds) {
-      coveredHunkIds.add(hunkId);
-    }
+    support.push({
+      blocks,
+      id,
+      reason: cleanText(item?.reason, 'Other changes'),
+    });
+    itemIds.add(id);
   }
+
   return support;
 };
 
@@ -410,10 +358,9 @@ const addUnreferencedSupport = (support, index, coveredHunkIds, itemIds) => {
     groupsByPath.set(hunk.path, groups);
   }
 
-  for (const [path, hunks] of groupsByPath) {
-    for (let start = 0; start < hunks.length; start += MAX_HUNKS_PER_WALKTHROUGH_GROUP) {
-      const chunk = hunks.slice(start, start + MAX_HUNKS_PER_WALKTHROUGH_GROUP);
-      const lineCount = sumHunkLineCounts(chunk);
+  for (const [, hunks] of groupsByPath) {
+    for (let start = 0; start < hunks.length; start += MAX_BLOCKS_PER_STOP) {
+      const chunk = hunks.slice(start, start + MAX_BLOCKS_PER_STOP);
       let counter = support.length + 1;
       let id = `support-${counter}`;
       while (itemIds.has(id)) {
@@ -421,13 +368,9 @@ const addUnreferencedSupport = (support, index, coveredHunkIds, itemIds) => {
         id = `support-${counter}`;
       }
       support.push({
-        added: lineCount.added,
-        deleted: lineCount.deleted,
-        hunkIds: chunk.map((hunk) => hunk.id),
-        hunks: chunk.map(normalizeHunk),
+        blocks: chunk.map((hunk) => ({ hunk: normalizeHunk(hunk), type: 'hunk' })),
         id,
         reason: 'Other changes',
-        title: path,
       });
       itemIds.add(id);
       for (const hunk of chunk) {
@@ -443,18 +386,33 @@ const normalizeNarrativeWalkthrough = (input, files, facts = {}) => {
   }
   if (isLegacyV3Walkthrough(input)) {
     throw new Error(
-      'Narrative walkthrough uses the legacy v3 anchors[] schema. Regenerate it with the v4 hunkIds[] schema for this diff.',
+      'Narrative walkthrough uses the legacy v3 anchors[] schema. Regenerate it with the v4 blocks[] schema for this diff.',
+    );
+  }
+  if (
+    input?.version === 4 &&
+    Array.isArray(input?.chapters) &&
+    input.chapters.some((ch) => (ch?.stops || []).some((stop) => Array.isArray(stop?.hunkIds)))
+  ) {
+    throw new Error(
+      'Narrative walkthrough uses the legacy v4 hunkIds[] schema. Regenerate it with the v4 blocks[] schema for this diff.',
     );
   }
 
   const index = indexFiles(files);
   const coveredHunkIds = new Set();
-  const { chapters, itemIds, stopCount } = normalizeChapters(input, index, coveredHunkIds);
+  const walkthroughDir = typeof facts.walkthroughDir === 'string' ? facts.walkthroughDir : null;
+  const { chapters, itemIds, stopCount } = normalizeChapters(
+    input,
+    index,
+    coveredHunkIds,
+    walkthroughDir,
+  );
   if (chapters.length === 0 || stopCount === 0) {
     throw new Error('Narrative walkthrough has no chapters with resolvable stops.');
   }
 
-  const support = normalizeAuthoredSupport(input, index, coveredHunkIds, itemIds);
+  const support = normalizeAuthoredSupport(input, index, coveredHunkIds, itemIds, walkthroughDir);
   addUnreferencedSupport(support, index, coveredHunkIds, itemIds);
 
   const branch = typeof facts.branch === 'string' || facts.branch === null ? facts.branch : null;
@@ -656,19 +614,27 @@ const buildWalkthroughSizingGuidance = (state) => {
 - The digest has ${fileCount} files and ${hunkCount} reviewable hunks. Cover the changed hunks a reviewer should see, and put secondary/mechanical hunks in support[] rather than hiding them.
 - Define chapters[] in display order. Inside each chapter, define stops[] in display order.
 - Use stable item ids like s1, s2, ... for main stops and support-1, support-2, ... for supporting groups. Do not invent hunk ids.
-- Default to one review idea per stop. Include multiple hunkIds when the hunks implement the same idea, especially in small diffs.
+- Default to one review idea per stop. Include multiple hunk blocks when the hunks implement the same idea, especially in small diffs.
 
 Grouping contract:
 - Target ${targetStops} main-path stops and at most ${MAX_WALKTHROUGH_STOPS}.
 - Use ${targetChapterInstruction}. A chapter is a conceptual group, not a file. For one- or two-file diffs, prefer one chapter unless there are clearly separate review phases.
 - Chapter titles render in a compact top bar: keep each title to 1-2 short words and at most 16 characters, e.g. "UI", "CLI", "Tests", "Docs", "Runtime", "Cleanup".
-- A stop or support item may contain at most ${MAX_HUNKS_PER_WALKTHROUGH_GROUP} hunkIds. Use multiple hunkIds when the prose needs those hunks read together to understand one invariant, behavior, or repeated pattern.
+- Each stop has a **blocks** array. Each block is one of:
+  - { "type": "markup", "prose": "Markdown text explaining this part." }
+  - { "type": "hunk", "hunkId": "<deterministic-id>", "note": "optional note" }
+  - { "type": "html", "html": "<p>HTML content</p>" } or { "type": "html", "htmlFile": "relative/path.html" }
+- A stop must have at least 1 block and at most ${MAX_BLOCKS_PER_STOP} blocks.
+- Hunk blocks use a single hunkId (not an array). One hunk per block.
+- Markup blocks contain markdown prose narration.
+- Put a markup block before each hunk block to explain what the reviewer should look for.
+- Support items use the same blocks format with only hunk blocks typically.
+- A stop or support item may contain at most ${MAX_BLOCKS_PER_STOP} blocks.
 - Generated-like files have "generated": true and one synthetic hunk per changed section. Never split them; main-path them only when they explain behavior, like snapshots proving output.
-- For 1-4 total hunks, usually write 1-2 stops. Similar same-file hunks should usually be one stop with multiple hunkIds, not separate chapters or stops.
+- For 1-4 total hunks, usually write 1-2 stops. Similar same-file hunks should usually be one stop with multiple hunk blocks, not separate chapters or stops.
 - Split distant same-file hunks into separate consecutive stops when they deserve separate prose. Do not make a chapter-sized stop.
-- Put hunkIds in the exact display order you want Codiff to render. Out-of-line and cross-file order is allowed when it improves reviewer comprehension.
-- Use notes[] on a stop/support item for short per-hunk header notes: each note is { hunkId, body } and hunkId must be one of that item's hunkIds.
-- A stop may omit hunkIds entirely (or set hunkIds: []) to create a prose-only step with no diff panel — use for introductions, architecture context, or documentation. Use sparingly.
+- Put hunk blocks in the exact display order you want Codiff to render. Out-of-line and cross-file order is allowed when it improves reviewer comprehension.
+- A stop may consist of only markup blocks (no hunk blocks) to create a prose-only step with no diff panel — use for introductions, architecture context, or documentation. Use sparingly.
 - Do not provide added/deleted counts, status, oldPath, section ids, display labels, path, repo, source, generatedAt, agent, or meta; Codiff computes those.
 - Put secondary, mechanical, docs-only, or repeated-pattern hunks in support[], grouped by reason.
 - For working-tree sources, include commit.title and commit.body by default unless there are no commit-worthy files. Put the subject line in commit.title, not as the first line of commit.body.

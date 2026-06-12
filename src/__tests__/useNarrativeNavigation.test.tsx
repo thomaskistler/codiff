@@ -10,13 +10,9 @@ import type { NarrativeWalkthrough, WalkthroughStop } from '../types.ts';
 import { renderReact } from './helpers/react.tsx';
 
 const stop = (id: string): WalkthroughStop => ({
-  added: 1,
-  deleted: 0,
-  hunkIds: [],
-  hunks: [],
+  blocks: [],
   id,
   importance: 'normal',
-  prose: id,
   title: id,
 });
 

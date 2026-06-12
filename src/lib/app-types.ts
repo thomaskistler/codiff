@@ -42,12 +42,24 @@ type WalkthroughHeaderAnnotationMetadata = {
   type: 'walkthrough-header';
 };
 
+type WalkthroughHtmlAnnotationMetadata = {
+  html: string;
+  type: 'walkthrough-html';
+};
+
+type WalkthroughMarkupAnnotationMetadata = {
+  prose: string;
+  type: 'walkthrough-markup';
+};
+
 export type ReviewAnnotationMetadata =
   | CommitDetailsAnnotationMetadata
   | ImagePreviewAnnotationMetadata
   | MarkdownPreviewAnnotationMetadata
   | ReviewCommentAnnotationMetadata
-  | WalkthroughHeaderAnnotationMetadata;
+  | WalkthroughHeaderAnnotationMetadata
+  | WalkthroughHtmlAnnotationMetadata
+  | WalkthroughMarkupAnnotationMetadata;
 
 export type CodeViewInstance = NonNullable<
   ReturnType<CodeViewHandle<ReviewAnnotationMetadata>['getInstance']>

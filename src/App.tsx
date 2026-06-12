@@ -2228,7 +2228,7 @@ export default function App() {
             files={orderedFiles}
             showWhitespace={showWhitespace}
           />
-          {isPullRequest ? (
+          {isPullRequest && !showNarrativeWalkthrough ? (
             <PullRequestReviewButtons
               disabled={pullRequestReviewSubmitting != null}
               onSubmitReview={submitPullRequestReview}

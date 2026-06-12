@@ -983,22 +983,21 @@ test('narrative walkthrough stops do not repeat commit details', async () => {
         id: 'impl',
         stops: [
           {
-            added: 1,
-            deleted: 1,
-            hunkIds: ['src/app.ts:unstaged:h1'],
-            hunks: [
+            blocks: [
               {
-                added: 1,
-                anchor: { display: 'src/app.ts', sectionId: 'src/app.ts:unstaged', side: 'both' },
-                deleted: 1,
-                id: 'src/app.ts:unstaged:h1',
-                path: 'src/app.ts',
-                status: 'modified',
+                hunk: {
+                  added: 1,
+                  anchor: { display: 'src/app.ts', sectionId: 'src/app.ts:unstaged', side: 'both' },
+                  deleted: 1,
+                  id: 'src/app.ts:unstaged:h1',
+                  path: 'src/app.ts',
+                  status: 'modified',
+                },
+                type: 'hunk',
               },
             ],
             id: 's1',
             importance: 'critical',
-            prose: 'Review this file without repeating the commit header.',
             title: 'Implementation path',
           },
         ],
@@ -1073,22 +1072,21 @@ test('a walkthrough file loads even without the walkthrough launch flag', async 
         id: 'impl',
         stops: [
           {
-            added: 1,
-            deleted: 1,
-            hunkIds: ['src/app.ts:unstaged:h1'],
-            hunks: [
+            blocks: [
               {
-                added: 1,
-                anchor: { display: 'src/app.ts', sectionId: 'src/app.ts:unstaged', side: 'both' },
-                deleted: 1,
-                id: 'src/app.ts:unstaged:h1',
-                path: 'src/app.ts',
-                status: 'modified',
+                hunk: {
+                  added: 1,
+                  anchor: { display: 'src/app.ts', sectionId: 'src/app.ts:unstaged', side: 'both' },
+                  deleted: 1,
+                  id: 'src/app.ts:unstaged:h1',
+                  path: 'src/app.ts',
+                  status: 'modified',
+                },
+                type: 'hunk',
               },
             ],
             id: 'implementation-path',
             importance: 'critical',
-            prose: 'Review this file.',
             summary: 'The implementation path.',
             title: 'Implementation path',
           },

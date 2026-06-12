@@ -224,12 +224,6 @@ export type WalkthroughAnchor = {
   startLine?: number;
 };
 
-/** A short header note rendered above one focused walkthrough hunk diff. */
-export type WalkthroughHunkNote = {
-  body: string;
-  hunkId: string;
-};
-
 /**
  * Change-type tag shown on a file row in the commit composer. Mirrors the
  * walkthrough's narrative roles so a reviewer recognises each file at a glance.
@@ -262,38 +256,44 @@ export type WalkthroughHunk = {
   status: GitFileStatus;
 };
 
-/** Shared hunk-backed fields for a stop or support group. */
-export type WalkthroughHunkGroup = {
-  added: number;
-  /** Change-type tag for the commit composer's file row. */
+/** A markdown prose block rendered as its own panel. */
+export type WalkthroughMarkupBlock = {
+  prose: string;
+  type: 'markup';
+};
+
+/** A single resolved diff hunk rendered as its own diff panel. */
+export type WalkthroughHunkBlock = {
+  /** Resolved by the normalizer. */
+  hunk: WalkthroughHunk;
+  note?: string;
+  type: 'hunk';
+};
+
+/** A pure HTML block rendered as an iframe panel. */
+export type WalkthroughHtmlBlock = {
+  /** Raw HTML; htmlFile is resolved to html by the normalizer before the renderer sees this. */
+  html: string;
+  type: 'html';
+};
+
+export type WalkthroughBlock = WalkthroughMarkupBlock | WalkthroughHunkBlock | WalkthroughHtmlBlock;
+
+/** One stop in the main walkthrough path. */
+export type WalkthroughStop = {
+  blocks: ReadonlyArray<WalkthroughBlock>;
   changeType?: WalkthroughChangeType;
-  /** One-line note the generated commit body uses for this file (falls back to {@link summary}). */
   commitNote?: string;
-  deleted: number;
-  /** Deterministic hunk ids selected by the authoring agent, in display order. */
-  hunkIds: ReadonlyArray<string>;
-  /** Resolved hunks with Codiff-computed anchors, file paths, status, and line counts. */
-  hunks: ReadonlyArray<WalkthroughHunk>;
-  /** Stable within the document, e.g. 's1'. */
   id: string;
-  /** Optional header notes for individual hunk ids in this item. */
-  notes?: ReadonlyArray<WalkthroughHunkNote>;
-  /** Short, plain-text gist of the slice. */
+  importance: 'critical' | 'normal' | 'context';
   summary?: string;
   title?: string;
 };
 
-/** One stop in the main walkthrough path. */
-export type WalkthroughStop = WalkthroughHunkGroup & {
-  importance: 'critical' | 'normal' | 'context';
-  /** Agent narration (markdown / inline code). */
-  prose: string;
-};
-
 /** A changed hunk group kept off the main path. */
-export type WalkthroughSupportGroup = WalkthroughHunkGroup & {
-  note?: string;
-  /** Why it is off the path, e.g. 'Generated' | 'Lockfile' | 'Snapshot' | 'Mechanical'. */
+export type WalkthroughSupportGroup = {
+  blocks: ReadonlyArray<WalkthroughBlock>;
+  id: string;
   reason: string;
 };
 
