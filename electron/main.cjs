@@ -1024,6 +1024,7 @@ ipcMain.handle('codiff:getNarrativeWalkthrough', async (event, source) => {
             generatedAt: state.generatedAt,
             root: state.root,
             source: state.source,
+            walkthroughDir: dirname(walkthroughFile),
           }),
         };
       } catch (error) {

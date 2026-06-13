@@ -9,7 +9,7 @@ import {
   type WalkthroughView,
   type WalkthroughStopView,
 } from '../../../lib/narrative-walkthrough.ts';
-import type { ChangedFile, NarrativeWalkthrough } from '../../../types.ts';
+import type { ChangedFile, NarrativeWalkthrough, WalkthroughHunkBlock } from '../../../types.ts';
 import { Check, GitBranch, Path } from './icons.tsx';
 import { ChapterIcon } from './parts.tsx';
 import type { NarrativeNavigation } from './useNarrativeNavigation.ts';
@@ -80,8 +80,14 @@ function TocStop({
           <span className="wt-toc-num">{stop.index + 1}</span>
           <span className="wt-toc-title">{title}</span>
         </span>
-        {stop.hunks.length > 0 ? (
-          <TocFileRows files={formatWalkthroughFileLineRows(stop.hunks)} />
+        {stop.blocks.some((b) => b.type === 'hunk') ? (
+          <TocFileRows
+            files={formatWalkthroughFileLineRows(
+              stop.blocks
+                .filter((b): b is WalkthroughHunkBlock => b.type === 'hunk')
+                .map((b) => b.hunk),
+            )}
+          />
         ) : null}
       </span>
     </button>
@@ -110,7 +116,9 @@ function SupportingFilesStop({
   const current = navigation.mode === 'support';
   const isDone = navigation.supportVisited && !current;
   const fileRows = formatWalkthroughFileLineRows([
-    ...walkthroughView.support.flatMap((item) => item.hunks),
+    ...walkthroughView.support.flatMap((item) =>
+      item.blocks.filter((b): b is WalkthroughHunkBlock => b.type === 'hunk').map((b) => b.hunk),
+    ),
     ...uncoveredFiles,
   ]);
   return (

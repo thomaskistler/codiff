@@ -198,9 +198,6 @@
 }
 
 /* ---- Agent narration (distinct from the reviewer's own comments) ---------- */
-.wt-narration {
-  margin: 0 0 16px;
-}
 .wt-narration-prose {
   color: var(--text);
   font: 14px/1.6 var(--font-sans);
@@ -274,6 +271,15 @@
 .wt-narration-prose em {
   font-style: normal;
   font-weight: 600;
+}
+.wt-narration-html {
+  border: none;
+  display: block;
+  height: 600px;
+  width: 100%;
+}
+.wt-narration-markup {
+  padding: 16px 24px;
 }
 
 /* ---- Importance pill + stage header --------------------------------------- */
@@ -535,16 +541,6 @@
 }
 .wt-stop-block-header.current {
   box-shadow: inset 3px 0 0 var(--tree-selection-focus);
-}
-.wt-stop-block-header.wt-prose {
-  box-shadow:
-    inset 3px 0 0 rgb(61 135 245 / 0),
-    6px 18px 80px -54px rgb(0 0 0 / 0.78);
-}
-.wt-stop-block-header.wt-prose.current {
-  box-shadow:
-    inset 3px 0 0 var(--tree-selection-focus),
-    6px 18px 80px -54px rgb(0 0 0 / 0.78);
 }
 
 /* The whole order as one continuous scroll: each stop is a block (narration +

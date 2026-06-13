@@ -18,33 +18,12 @@ const CHANGE_TYPES = new Set([
 const MAX_WALKTHROUGH_CHAPTERS = 6;
 const MAX_WALKTHROUGH_STOPS = 14;
 const MAX_HUNKS_PER_WALKTHROUGH_GROUP = 14;
+const MAX_BLOCKS_PER_STOP = 20;
 
 const hunkGroupProperties = {
   changeType: { enum: [...CHANGE_TYPES], type: 'string' },
   commitNote: { type: 'string' },
-  hunkIds: {
-    description:
-      'Deterministic hunk ids from the repository digest, in the display order Codiff should render them. Generated-like files are represented by one synthetic hunk id per changed section.',
-    items: { type: 'string' },
-    maxItems: MAX_HUNKS_PER_WALKTHROUGH_GROUP,
-    minItems: 1,
-    type: 'array',
-  },
   id: { type: 'string' },
-  notes: {
-    description:
-      'Optional short header notes for selected hunk ids. Codiff renders each note under that focused diff header.',
-    items: {
-      additionalProperties: false,
-      properties: {
-        body: { type: 'string' },
-        hunkId: { type: 'string' },
-      },
-      required: ['hunkId', 'body'],
-      type: 'object',
-    },
-    type: 'array',
-  },
   summary: { type: 'string' },
   title: { type: 'string' },
 };
@@ -75,12 +54,47 @@ const narrativeWalkthroughSchema = {
             items: {
               additionalProperties: false,
               properties: {
+                blocks: {
+                  description: 'Ordered sequence of content blocks for this stop.',
+                  items: {
+                    additionalProperties: false,
+                    properties: {
+                      html: {
+                        description: 'Inline HTML. Mutually exclusive with htmlFile.',
+                        type: 'string',
+                      },
+                      htmlFile: {
+                        description:
+                          'Path to an HTML file relative to the walkthrough JSON. Mutually exclusive with html.',
+                        type: 'string',
+                      },
+                      hunkId: {
+                        description: 'Deterministic hunk id from the repository digest.',
+                        type: 'string',
+                      },
+                      note: {
+                        description: "Short header note shown above this hunk's diff panel.",
+                        type: 'string',
+                      },
+                      prose: { description: 'Markdown prose for a markup block.', type: 'string' },
+                      type: {
+                        description:
+                          'Block kind: markup renders markdown, hunk renders a single diff hunk, html renders an iframe.',
+                        enum: ['markup', 'hunk', 'html'],
+                        type: 'string',
+                      },
+                    },
+                    required: ['type'],
+                    type: 'object',
+                  },
+                  maxItems: MAX_BLOCKS_PER_STOP,
+                  minItems: 1,
+                  type: 'array',
+                },
                 ...hunkGroupProperties,
-                hunkIds: { ...hunkGroupProperties.hunkIds, minItems: 0 },
                 importance: { enum: [...IMPORTANCES], type: 'string' },
-                prose: { type: 'string' },
               },
-              required: ['id', 'importance', 'prose'],
+              required: ['id', 'importance', 'blocks'],
               type: 'object',
             },
             maxItems: MAX_WALKTHROUGH_STOPS,
@@ -100,11 +114,47 @@ const narrativeWalkthroughSchema = {
       items: {
         additionalProperties: false,
         properties: {
+          blocks: {
+            description: 'Ordered sequence of content blocks for this stop.',
+            items: {
+              additionalProperties: false,
+              properties: {
+                html: {
+                  description: 'Inline HTML. Mutually exclusive with htmlFile.',
+                  type: 'string',
+                },
+                htmlFile: {
+                  description:
+                    'Path to an HTML file relative to the walkthrough JSON. Mutually exclusive with html.',
+                  type: 'string',
+                },
+                hunkId: {
+                  description: 'Deterministic hunk id from the repository digest.',
+                  type: 'string',
+                },
+                note: {
+                  description: "Short header note shown above this hunk's diff panel.",
+                  type: 'string',
+                },
+                prose: { description: 'Markdown prose for a markup block.', type: 'string' },
+                type: {
+                  description:
+                    'Block kind: markup renders markdown, hunk renders a single diff hunk, html renders an iframe.',
+                  enum: ['markup', 'hunk', 'html'],
+                  type: 'string',
+                },
+              },
+              required: ['type'],
+              type: 'object',
+            },
+            maxItems: MAX_BLOCKS_PER_STOP,
+            minItems: 1,
+            type: 'array',
+          },
           ...hunkGroupProperties,
-          note: { type: 'string' },
           reason: { type: 'string' },
         },
-        required: ['id', 'hunkIds', 'reason'],
+        required: ['id', 'reason', 'blocks'],
         type: 'object',
       },
       type: 'array',
@@ -175,6 +225,7 @@ module.exports = {
   CHANGE_TYPES,
   ICONS,
   IMPORTANCES,
+  MAX_BLOCKS_PER_STOP,
   MAX_WALKTHROUGH_CHAPTERS,
   MAX_WALKTHROUGH_STOPS,
   MAX_HUNKS_PER_WALKTHROUGH_GROUP,

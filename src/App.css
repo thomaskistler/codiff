@@ -1179,7 +1179,7 @@
   border-radius: var(--codiff-diff-radius);
   box-shadow:
     0 0 0 1px var(--file-border),
-    6px 18px 80px -54px rgb(0 0 0 / 0.78);
+    10px 10px 40px -10px rgb(0 0 0 / 0.3);
   contain: layout style;
   corner-shape: squircle;
   display: block;
@@ -1556,6 +1556,14 @@
 .codiff-walkthrough-header-item {
   background: transparent !important;
   box-shadow: none !important;
+}
+
+.codiff-walkthrough-html-item {
+  margin-top: 16px;
+}
+
+.codiff-walkthrough-markup-item {
+  margin-top: 0;
 }
 
 .codiff-file-header.selected {

@@ -989,8 +989,10 @@ type FileReviewDiffBlock = {
   fileSelected?: boolean;
   header?: ReactNode;
   headerSelected?: boolean;
+  htmlContent?: string;
   id: string;
   itemIdPrefix?: string;
+  markupContent?: string;
   note?: string;
   reviewIdentity?: ReviewIdentity;
   selected?: boolean;
@@ -998,9 +1000,11 @@ type FileReviewDiffBlock = {
 
 type HeaderReviewDiffBlock = {
   file?: undefined;
-  header: ReactNode;
+  header: ReactNode | null;
   headerSelected?: boolean;
+  htmlContent?: string;
   id: string;
+  markupContent?: string;
   selected?: boolean;
 };
 
@@ -1469,6 +1473,60 @@ export function ReviewCodeView({
         });
       }
 
+      if (block.htmlContent) {
+        const htmlItemId = `${block.id}:walkthrough-html`;
+        nextFirstItemByBlockId.set(block.id, nextFirstItemByBlockId.get(block.id) ?? htmlItemId);
+        nextItemBlockId.set(htmlItemId, block.id);
+        nextItems.push({
+          annotations: [
+            {
+              lineNumber: 1,
+              metadata: {
+                html: block.htmlContent,
+                type: 'walkthrough-html',
+              },
+            } satisfies LineAnnotation<ReviewAnnotationMetadata>,
+          ],
+          collapsed: false,
+          file: {
+            cacheKey: `walkthrough-html:${block.id}`,
+            contents: ' ',
+            lang: 'text',
+            name: htmlItemId,
+          },
+          id: htmlItemId,
+          type: 'file',
+          version: getItemVersion(`${block.id}:walkthrough-html`),
+        });
+      }
+
+      if (block.markupContent) {
+        const markupItemId = `${block.id}:walkthrough-markup`;
+        nextFirstItemByBlockId.set(block.id, nextFirstItemByBlockId.get(block.id) ?? markupItemId);
+        nextItemBlockId.set(markupItemId, block.id);
+        nextItems.push({
+          annotations: [
+            {
+              lineNumber: 1,
+              metadata: {
+                prose: block.markupContent,
+                type: 'walkthrough-markup',
+              },
+            } satisfies LineAnnotation<ReviewAnnotationMetadata>,
+          ],
+          collapsed: false,
+          file: {
+            cacheKey: `walkthrough-markup:${block.id}`,
+            contents: ' ',
+            lang: 'text',
+            name: markupItemId,
+          },
+          id: markupItemId,
+          type: 'file',
+          version: getItemVersion(`${block.id}:walkthrough-markup`),
+        });
+      }
+
       if (!block.file) {
         continue;
       }
@@ -1857,11 +1915,33 @@ export function ReviewCodeView({
         onPostRender: (node, _instance, _phase, context) => {
           const metadata = itemMetadata.get(context.item.id);
           const isWalkthroughHeaderItem = context.item.id.endsWith(':walkthrough-header');
+          const isWalkthroughHtmlItem = context.item.id.endsWith(':walkthrough-html');
           node.classList.toggle(
             'codiff-commit-details-item',
             context.item.id === commitDetailsItemId,
           );
           node.classList.toggle('codiff-walkthrough-header-item', isWalkthroughHeaderItem);
+          node.classList.toggle('codiff-walkthrough-html-item', isWalkthroughHtmlItem);
+          if (isWalkthroughHtmlItem) {
+            const shadowRoot = node.shadowRoot;
+            if (shadowRoot && !shadowRoot.querySelector('[data-codiff-html-gutter-style]')) {
+              const style = document.createElement('style');
+              style.setAttribute('data-codiff-html-gutter-style', '');
+              style.textContent = '[data-gutter], [data-line] { display: none !important; }';
+              shadowRoot.append(style);
+            }
+          }
+          const isWalkthroughMarkupItem = context.item.id.endsWith(':walkthrough-markup');
+          node.classList.toggle('codiff-walkthrough-markup-item', isWalkthroughMarkupItem);
+          if (isWalkthroughMarkupItem) {
+            const shadowRoot = node.shadowRoot;
+            if (shadowRoot && !shadowRoot.querySelector('[data-codiff-markup-gutter-style]')) {
+              const style = document.createElement('style');
+              style.setAttribute('data-codiff-markup-gutter-style', '');
+              style.textContent = '[data-gutter], [data-line] { display: none !important; }';
+              shadowRoot.append(style);
+            }
+          }
           node.classList.toggle('codiff-selected-item', metadata?.isSelected === true);
           node.classList.toggle(
             'codiff-markdown-preview-item',
@@ -2442,6 +2522,18 @@ export function ReviewCodeView({
             onSelectFileDestination={scrollToCommitDetailsDestination}
           />
         );
+      }
+
+      if (annotation.metadata.type === 'walkthrough-markup') {
+        return (
+          <div className="wt-narration-markup">
+            <div className="wt-narration-prose">{renderMarkdown(annotation.metadata.prose)}</div>
+          </div>
+        );
+      }
+
+      if (annotation.metadata.type === 'walkthrough-html') {
+        return <iframe className="wt-narration-html" srcDoc={annotation.metadata.html} title="" />;
       }
 
       if (annotation.metadata.type === 'walkthrough-header') {

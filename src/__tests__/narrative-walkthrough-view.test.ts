@@ -11,17 +11,15 @@ import {
   getCommitSelectionPaths,
   getUncoveredWalkthroughFileLineItems,
   getUncoveredWalkthroughFiles,
-  getWalkthroughRunNote,
   isWalkthroughCommittable,
   resolveWalkthroughHunkFile,
-  resolveWalkthroughHunkRuns,
   walkthroughItemPaths,
 } from '../lib/narrative-walkthrough.ts';
 import type {
   ChangedFile,
   NarrativeWalkthrough,
   WalkthroughHunk,
-  WalkthroughHunkGroup,
+  WalkthroughStop,
 } from '../types.ts';
 
 const hunk = ({
@@ -120,23 +118,6 @@ const keyEvent = (
   shiftKey: modifiers.shiftKey ?? false,
 });
 
-const group = ({
-  hunks,
-  id,
-  title,
-}: {
-  hunks: ReadonlyArray<WalkthroughHunk>;
-  id: string;
-  title?: string;
-}): WalkthroughHunkGroup => ({
-  added: hunks.reduce((total, hunk) => total + hunk.added, 0),
-  deleted: hunks.reduce((total, hunk) => total + hunk.deleted, 0),
-  hunkIds: hunks.map((hunk) => hunk.id),
-  hunks,
-  id,
-  title,
-});
-
 const walkthrough = (): NarrativeWalkthrough => ({
   agent: 'claude',
   chapters: [
@@ -146,9 +127,12 @@ const walkthrough = (): NarrativeWalkthrough => ({
       id: 'bug',
       stops: [
         {
-          ...group({ hunks: [appHunk], id: 's1' }),
+          blocks: [
+            { prose: 'Bug.', type: 'markup' },
+            { hunk: appHunk, type: 'hunk' },
+          ],
+          id: 's1',
           importance: 'critical',
-          prose: 'Bug.',
         },
       ],
       title: 'The bug',
@@ -159,9 +143,12 @@ const walkthrough = (): NarrativeWalkthrough => ({
       id: 'proof',
       stops: [
         {
-          ...group({ hunks: [testHunk], id: 's2' }),
+          blocks: [
+            { prose: 'Test.', type: 'markup' },
+            { hunk: testHunk, type: 'hunk' },
+          ],
+          id: 's2',
           importance: 'normal',
-          prose: 'Test.',
         },
       ],
       title: 'Proof',
@@ -173,8 +160,8 @@ const walkthrough = (): NarrativeWalkthrough => ({
   repo: { branch: 'main', root: '/repo' },
   source: { type: 'working-tree' },
   support: [
-    { ...group({ hunks: [lockHunk], id: 'lock' }), note: 'Regenerated.', reason: 'Lockfile' },
-    { ...group({ hunks: [mirrorHunk], id: 'mirror' }), note: 'Mirror.', reason: 'Mechanical' },
+    { blocks: [{ hunk: lockHunk, type: 'hunk' }], id: 'lock', reason: 'Lockfile' },
+    { blocks: [{ hunk: mirrorHunk, type: 'hunk' }], id: 'mirror', reason: 'Mechanical' },
   ],
   title: 'Title',
   version: 4,
@@ -256,9 +243,13 @@ test('buildWalkthroughView preserves cross-file hunk groups in one stop', () => 
         ...base.chapters[0],
         stops: [
           {
-            ...group({ hunks: [appHunk, testHunk], id: 'combo' }),
+            blocks: [
+              { prose: 'Bug and proof belong together.', type: 'markup' },
+              { hunk: appHunk, type: 'hunk' },
+              { hunk: testHunk, type: 'hunk' },
+            ],
+            id: 'combo',
             importance: 'critical',
-            prose: 'Bug and proof belong together.',
           },
         ],
       },
@@ -316,7 +307,6 @@ test('buildCommitModel carries per-file change-type tags and notes onto rows', (
         ],
       },
     ],
-    support: [{ ...base.support[0], changeType: 'lockfile' }, base.support[1]],
   };
   const model = buildCommitModel(buildWalkthroughView(wt)!);
   const byPath = new Map(model.files.map((file) => [file.path, file]));
@@ -326,7 +316,8 @@ test('buildCommitModel carries per-file change-type tags and notes onto rows', (
     changeType: 'test',
     note: 'lock the regression',
   });
-  expect(byPath.get('pnpm-lock.yaml')?.changeType).toBe('lockfile');
+  expect(byPath.get('pnpm-lock.yaml')?.changeType).toBeUndefined();
+  expect(byPath.get('pnpm-lock.yaml')?.note).toBe('Lockfile');
 });
 
 test('buildCommitModel appends live tree files missing from the walkthrough', () => {
@@ -478,9 +469,12 @@ test('covered synthetic hunks do not reappear in support fallback', () => {
         id: 'assets',
         stops: [
           {
-            ...group({ hunks: [synthetic], id: 'logo' }),
+            blocks: [
+              { prose: 'Review the image asset.', type: 'markup' },
+              { hunk: synthetic, type: 'hunk' },
+            ],
+            id: 'logo',
             importance: 'normal',
-            prose: 'Review the image asset.',
           },
         ],
         title: 'Assets',
@@ -514,9 +508,12 @@ test('covered synthetic sections do not reappear after content loads', () => {
         id: 'loaded',
         stops: [
           {
-            ...group({ hunks: [synthetic], id: 'loaded-section' }),
+            blocks: [
+              { prose: 'Review the loaded section.', type: 'markup' },
+              { hunk: synthetic, type: 'hunk' },
+            ],
+            id: 'loaded-section',
             importance: 'normal',
-            prose: 'Review the loaded section.',
           },
         ],
         title: 'Loaded',
@@ -700,9 +697,12 @@ const walkthroughViewCovering = (coveredHunk: WalkthroughHunk) =>
         id: 'main',
         stops: [
           {
-            ...group({ hunks: [coveredHunk], id: `covered-${coveredHunk.id}` }),
+            blocks: [
+              { prose: 'Covers the hunk.', type: 'markup' },
+              { hunk: coveredHunk, type: 'hunk' },
+            ],
+            id: `covered-${coveredHunk.id}`,
             importance: 'normal',
-            prose: 'Covers the hunk.',
           },
         ],
         title: 'Main',
@@ -925,6 +925,20 @@ test('focusChangedFileForHunks keeps synthetic hunks as whole sections after con
   ).toBeGreaterThan(1);
 });
 
+// Compile-time guard: stop type shapes
+const _htmlStop: WalkthroughStop = {
+  blocks: [{ html: '<p>Hello</p>', type: 'html' }],
+  id: 'h1',
+  importance: 'normal',
+};
+const _diffStop: WalkthroughStop = {
+  blocks: [{ hunk: appHunk, type: 'hunk' }],
+  id: 'd1',
+  importance: 'normal',
+};
+void _htmlStop;
+void _diffStop;
+
 test('focusChangedFileForHunks fails closed for unresolved hunk ids', () => {
   const file = multiHunkFile();
   const section = file.sections[0];
@@ -944,76 +958,24 @@ test('focusChangedFileForHunks fails closed for unresolved hunk ids', () => {
   ).toBeNull();
 });
 
-test('resolveWalkthroughHunkRuns groups adjacent same-file hunks without reordering', () => {
-  const file = multiHunkFile();
-  const other: ChangedFile = {
-    fingerprint: 'other',
-    path: 'other.py',
-    sections: [
-      {
-        binary: false,
-        id: 'other.py:unstaged',
-        kind: 'unstaged',
-        loadState: 'ready',
-        patch: '@@ -1 +1 @@\n-old\n+new\n',
-      },
+test('walkthroughItemPaths returns hunk block paths', () => {
+  const stop: WalkthroughStop = {
+    blocks: [
+      { prose: 'Text.', type: 'markup' },
+      { hunk: appHunk, type: 'hunk' },
+      { hunk: testHunk, type: 'hunk' },
     ],
-    status: 'modified',
+    id: 's1',
+    importance: 'normal',
   };
-  const item = {
-    ...group({
-      hunks: [
-        hunk({
-          added: 1,
-          deleted: 1,
-          display: 'database_search.py:2',
-          id: 'database_search.py:unstaged:h1',
-          path: 'database_search.py',
-          sectionId: 'database_search.py:unstaged',
-          status: 'modified',
-        }),
-        hunk({
-          added: 1,
-          deleted: 1,
-          display: 'other.py:1',
-          id: 'other.py:unstaged:h1',
-          path: 'other.py',
-          sectionId: 'other.py:unstaged',
-          status: 'modified',
-        }),
-        hunk({
-          added: 1,
-          deleted: 1,
-          display: 'database_search.py:12',
-          id: 'database_search.py:unstaged:h3',
-          path: 'database_search.py',
-          sectionId: 'database_search.py:unstaged',
-          status: 'modified',
-        }),
-      ],
-      id: 'cross',
-    }),
-  };
-
-  expect(
-    resolveWalkthroughHunkRuns(item, [file, other]).map((run) => run.resolved.file.path),
-  ).toEqual(['database_search.py', 'other.py', 'database_search.py']);
-
-  const grouped = resolveWalkthroughHunkRuns(
-    { ...item, hunks: [item.hunks[0], item.hunks[2], item.hunks[1]] },
-    [file, other],
-  );
-  expect(grouped.map((run) => run.hunks.map((hunk) => hunk.id))).toEqual([
-    ['database_search.py:unstaged:h1', 'database_search.py:unstaged:h3'],
-    ['other.py:unstaged:h1'],
-  ]);
+  expect(walkthroughItemPaths(stop)).toEqual(['src/App.tsx', 'src/test.ts']);
 });
 
 test('buildWalkthroughView includes prose-only stops in the sequence with empty hunks', () => {
-  const proseStop = {
-    ...group({ hunks: [], id: 'intro' }),
-    importance: 'normal' as const,
-    prose: 'An architectural overview.',
+  const proseStop: WalkthroughStop = {
+    blocks: [{ prose: 'An architectural overview.', type: 'markup' }],
+    id: 'intro',
+    importance: 'normal',
   };
 
   const wt: NarrativeWalkthrough = {
@@ -1034,9 +996,8 @@ test('buildWalkthroughView includes prose-only stops in the sequence with empty 
 
   expect(view.sequence).toHaveLength(3);
   expect(view.sequence[0]).toMatchObject({
+    blocks: [{ prose: 'An architectural overview.', type: 'markup' }],
     chapterId: 'overview',
-    hunkIds: [],
-    hunks: [],
     id: 'intro',
     index: 0,
   });
@@ -1046,48 +1007,37 @@ test('buildWalkthroughView includes prose-only stops in the sequence with empty 
   expect(walkthroughItemPaths(view.sequence[0])).toEqual([]);
 });
 
-test('getWalkthroughRunNote combines header notes for grouped hunks', () => {
-  const file = multiHunkFile();
-  const section = file.sections[0];
-  const item = {
-    ...group({
-      hunks: [
-        hunk({
-          added: 1,
-          deleted: 1,
-          display: 'database_search.py:2',
-          id: `${section.id}:h1`,
-          path: file.path,
-          sectionId: section.id,
-          status: 'modified',
-        }),
-        hunk({
-          added: 1,
-          deleted: 1,
-          display: 'database_search.py:12',
-          id: `${section.id}:h3`,
-          path: file.path,
-          sectionId: section.id,
-          status: 'modified',
-        }),
-      ],
-      id: 'drag',
-    }),
-    notes: [
+test('buildWalkthroughView includes html stops in the sequence', () => {
+  const htmlStop: WalkthroughStop = {
+    blocks: [{ html: '<p>Architecture overview.</p>', type: 'html' }],
+    id: 'html-intro',
+    importance: 'normal',
+  };
+
+  const base = walkthrough();
+  const wt: NarrativeWalkthrough = {
+    ...base,
+    chapters: [
       {
-        body: 'This line turns the widget into a reorderable list.',
-        hunkId: `${section.id}:h1`,
+        blurb: 'Overview.',
+        icon: 'doc' as const,
+        id: 'overview',
+        stops: [htmlStop],
+        title: 'Overview',
       },
-      {
-        body: 'This hunk persists the final order.',
-        hunkId: `${section.id}:h3`,
-      },
+      ...base.chapters,
     ],
   };
-  const runs = resolveWalkthroughHunkRuns(item, [file]);
 
-  expect(runs).toHaveLength(1);
-  expect(getWalkthroughRunNote(item, runs[0])).toBe(
-    'This line turns the widget into a reorderable list. This hunk persists the final order.',
-  );
+  const view = buildWalkthroughView(wt)!;
+
+  expect(view.sequence).toHaveLength(3);
+  expect(view.sequence[0]).toMatchObject({
+    blocks: [{ html: '<p>Architecture overview.</p>', type: 'html' }],
+    chapterId: 'overview',
+    id: 'html-intro',
+    importance: 'normal',
+    index: 0,
+  });
+  expect(view.sequence[1].index).toBe(1);
 });

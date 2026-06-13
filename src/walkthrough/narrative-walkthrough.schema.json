@@ -31,6 +31,44 @@
             "items": {
               "additionalProperties": false,
               "properties": {
+                "blocks": {
+                  "description": "Ordered sequence of content blocks for this stop.",
+                  "items": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "html": {
+                        "description": "Inline HTML. Mutually exclusive with htmlFile.",
+                        "type": "string"
+                      },
+                      "htmlFile": {
+                        "description": "Path to an HTML file relative to the walkthrough JSON. Mutually exclusive with html.",
+                        "type": "string"
+                      },
+                      "hunkId": {
+                        "description": "Deterministic hunk id from the repository digest.",
+                        "type": "string"
+                      },
+                      "note": {
+                        "description": "Short header note shown above this hunk's diff panel.",
+                        "type": "string"
+                      },
+                      "prose": {
+                        "description": "Markdown prose for a markup block.",
+                        "type": "string"
+                      },
+                      "type": {
+                        "description": "Block kind: markup renders markdown, hunk renders a single diff hunk, html renders an iframe.",
+                        "enum": ["markup", "hunk", "html"],
+                        "type": "string"
+                      }
+                    },
+                    "required": ["type"],
+                    "type": "object"
+                  },
+                  "maxItems": 20,
+                  "minItems": 1,
+                  "type": "array"
+                },
                 "changeType": {
                   "enum": [
                     "fix",
@@ -48,50 +86,21 @@
                 "commitNote": {
                   "type": "string"
                 },
-                "hunkIds": {
-                  "description": "Deterministic hunk ids from the repository digest, in the display order Codiff should render them. Generated-like files are represented by one synthetic hunk id per changed section.",
-                  "items": {
-                    "type": "string"
-                  },
-                  "maxItems": 14,
-                  "minItems": 0,
-                  "type": "array"
-                },
                 "id": {
-                  "type": "string"
-                },
-                "notes": {
-                  "description": "Optional short header notes for selected hunk ids. Codiff renders each note under that focused diff header.",
-                  "items": {
-                    "additionalProperties": false,
-                    "properties": {
-                      "body": {
-                        "type": "string"
-                      },
-                      "hunkId": {
-                        "type": "string"
-                      }
-                    },
-                    "required": ["hunkId", "body"],
-                    "type": "object"
-                  },
-                  "type": "array"
-                },
-                "summary": {
-                  "type": "string"
-                },
-                "title": {
                   "type": "string"
                 },
                 "importance": {
                   "enum": ["critical", "normal", "context"],
                   "type": "string"
                 },
-                "prose": {
+                "summary": {
+                  "type": "string"
+                },
+                "title": {
                   "type": "string"
                 }
               },
-              "required": ["id", "importance", "prose"],
+              "required": ["id", "importance", "blocks"],
               "type": "object"
             },
             "maxItems": 14,
@@ -119,6 +128,44 @@
       "items": {
         "additionalProperties": false,
         "properties": {
+          "blocks": {
+            "description": "Ordered sequence of content blocks for this stop.",
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "html": {
+                  "description": "Inline HTML. Mutually exclusive with htmlFile.",
+                  "type": "string"
+                },
+                "htmlFile": {
+                  "description": "Path to an HTML file relative to the walkthrough JSON. Mutually exclusive with html.",
+                  "type": "string"
+                },
+                "hunkId": {
+                  "description": "Deterministic hunk id from the repository digest.",
+                  "type": "string"
+                },
+                "note": {
+                  "description": "Short header note shown above this hunk's diff panel.",
+                  "type": "string"
+                },
+                "prose": {
+                  "description": "Markdown prose for a markup block.",
+                  "type": "string"
+                },
+                "type": {
+                  "description": "Block kind: markup renders markdown, hunk renders a single diff hunk, html renders an iframe.",
+                  "enum": ["markup", "hunk", "html"],
+                  "type": "string"
+                }
+              },
+              "required": ["type"],
+              "type": "object"
+            },
+            "maxItems": 20,
+            "minItems": 1,
+            "type": "array"
+          },
           "changeType": {
             "enum": [
               "fix",
@@ -136,49 +183,20 @@
           "commitNote": {
             "type": "string"
           },
-          "hunkIds": {
-            "description": "Deterministic hunk ids from the repository digest, in the display order Codiff should render them. Generated-like files are represented by one synthetic hunk id per changed section.",
-            "items": {
-              "type": "string"
-            },
-            "maxItems": 14,
-            "minItems": 1,
-            "type": "array"
-          },
           "id": {
             "type": "string"
           },
-          "notes": {
-            "description": "Optional short header notes for selected hunk ids. Codiff renders each note under that focused diff header.",
-            "items": {
-              "additionalProperties": false,
-              "properties": {
-                "body": {
-                  "type": "string"
-                },
-                "hunkId": {
-                  "type": "string"
-                }
-              },
-              "required": ["hunkId", "body"],
-              "type": "object"
-            },
-            "type": "array"
+          "reason": {
+            "type": "string"
           },
           "summary": {
             "type": "string"
           },
           "title": {
             "type": "string"
-          },
-          "note": {
-            "type": "string"
-          },
-          "reason": {
-            "type": "string"
           }
         },
-        "required": ["id", "hunkIds", "reason"],
+        "required": ["id", "reason", "blocks"],
         "type": "object"
       },
       "type": "array"
