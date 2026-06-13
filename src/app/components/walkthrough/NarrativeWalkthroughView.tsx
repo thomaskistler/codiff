@@ -32,23 +32,29 @@ export type WalkthroughBlockScrollTarget = {
   request: number;
 };
 
-const resolveHunkBlock = (
-  block: WalkthroughHunkBlock,
+const resolveHunkBlocks = (
+  blocks: ReadonlyArray<WalkthroughHunkBlock>,
   files: ReadonlyArray<ChangedFile>,
-): { file: ChangedFile; reviewIdentity: ReviewIdentity } | null => {
-  const resolved = resolveWalkthroughHunkFile(block.hunk, files);
+): { file: ChangedFile; note: string | undefined; reviewIdentity: ReviewIdentity } | null => {
+  if (blocks.length === 0) {
+    return null;
+  }
+  const resolved = resolveWalkthroughHunkFile(blocks[0].hunk, files);
   if (!resolved) {
     return null;
   }
-  const focused = focusChangedFileForHunks(resolved.file, resolved.section, [block.hunk]);
+  const hunks = blocks.map((b) => b.hunk);
+  const focused = focusChangedFileForHunks(resolved.file, resolved.section, hunks);
   if (!focused) {
     return null;
   }
+  const notes = blocks.flatMap((b) => (b.note != null ? [b.note] : []));
   return {
     file: focused,
+    note: notes.length > 0 ? notes.join(' ') : undefined,
     reviewIdentity: {
       fingerprint: focused.fingerprint,
-      key: `walkthrough:${block.hunk.id}`,
+      key: `walkthrough:${hunks.map((h) => h.id).join(',')}`,
     },
   };
 };
@@ -141,11 +147,51 @@ const createWalkthroughBlocks = (
       id: headerId,
     });
 
-    stop.blocks.forEach((block, blockIndex) => {
-      const blockId = `walkthrough:${stop.id}:block:${blockIndex}`;
+    type PendingHunkItem = { block: WalkthroughHunkBlock; blockIndex: number };
+    type PendingHunkRun = {
+      filePath: string;
+      items: Array<PendingHunkItem>;
+      sectionId: string;
+    };
+    let pendingRun: PendingHunkRun | null = null;
+
+    const pushHunkBlock = (hunkBlocks: Array<WalkthroughHunkBlock>, firstBlockIndex: number) => {
+      const resolved = resolveHunkBlocks(hunkBlocks, files);
+      if (!resolved) {
+        return;
+      }
+      const blockId = `walkthrough:${stop.id}:block:${firstBlockIndex}`;
       stopIndexByBlockId.set(blockId, stop.index);
+      blocks.push({
+        file: resolved.file,
+        header: null,
+        headerSelected: stop.index === currentIndex,
+        id: blockId,
+        itemIdPrefix: blockId,
+        note: resolved.note,
+        reviewIdentity: resolved.reviewIdentity,
+      });
+    };
+
+    const flushPendingRun = () => {
+      if (!pendingRun) {
+        return;
+      }
+      const { items } = pendingRun;
+      pushHunkBlock(
+        items.map((i) => i.block),
+        items[0].blockIndex,
+      );
+      pendingRun = null;
+    };
+
+    for (let blockIndex = 0; blockIndex < stop.blocks.length; blockIndex++) {
+      const block = stop.blocks[blockIndex];
+      const blockId = `walkthrough:${stop.id}:block:${blockIndex}`;
 
       if (block.type === 'markup') {
+        flushPendingRun();
+        stopIndexByBlockId.set(blockId, stop.index);
         blocks.push({
           header: null,
           headerSelected: stop.index === currentIndex,
@@ -153,6 +199,8 @@ const createWalkthroughBlocks = (
           markupContent: block.prose,
         });
       } else if (block.type === 'html') {
+        flushPendingRun();
+        stopIndexByBlockId.set(blockId, stop.index);
         blocks.push({
           header: null,
           headerSelected: stop.index === currentIndex,
@@ -160,20 +208,28 @@ const createWalkthroughBlocks = (
           id: blockId,
         });
       } else if (block.type === 'hunk') {
-        const resolved = resolveHunkBlock(block, files);
-        if (resolved) {
-          blocks.push({
-            file: resolved.file,
-            header: null,
-            headerSelected: stop.index === currentIndex,
-            id: blockId,
-            itemIdPrefix: blockId,
-            note: block.note,
-            reviewIdentity: resolved.reviewIdentity,
-          });
+        const resolvedFile = resolveWalkthroughHunkFile(block.hunk, files);
+        if (resolvedFile) {
+          if (
+            pendingRun &&
+            pendingRun.filePath === resolvedFile.file.path &&
+            pendingRun.sectionId === resolvedFile.section.id
+          ) {
+            pendingRun.items.push({ block, blockIndex });
+          } else {
+            flushPendingRun();
+            pendingRun = {
+              filePath: resolvedFile.file.path,
+              items: [{ block, blockIndex }],
+              sectionId: resolvedFile.section.id,
+            };
+          }
+        } else {
+          flushPendingRun();
         }
       }
-    });
+    }
+    flushPendingRun();
   }
 
   return { blocks, firstBlockIdByStop, stopIndexByBlockId };
@@ -202,15 +258,23 @@ const createSupportBlocks = (
 
   for (const group of walkthroughView.supportByReason) {
     for (const item of group.files) {
-      item.blocks.forEach((block, blockIndex) => {
-        if (block.type !== 'hunk') {
-          return;
-        }
-        const resolved = resolveHunkBlock(block, files);
+      type PendingSupportItem = { block: WalkthroughHunkBlock; blockIndex: number };
+      type PendingSupportRun = {
+        filePath: string;
+        items: Array<PendingSupportItem>;
+        sectionId: string;
+      };
+      let pendingRun: PendingSupportRun | null = null;
+
+      const pushSupportBlock = (
+        hunkBlocks: Array<WalkthroughHunkBlock>,
+        firstBlockIndex: number,
+      ) => {
+        const resolved = resolveHunkBlocks(hunkBlocks, files);
         if (!resolved) {
           return;
         }
-        const blockId = `walkthrough:support:${item.id}:${blockIndex}`;
+        const blockId = `walkthrough:support:${item.id}:${firstBlockIndex}`;
         const isFirstBlock = blocks.length === 0;
         blocks.push({
           file: resolved.file,
@@ -218,10 +282,50 @@ const createSupportBlocks = (
           headerSelected: selected,
           id: blockId,
           itemIdPrefix: blockId,
-          note: block.note ?? block.hunk.path,
+          note: resolved.note ?? hunkBlocks[0].hunk.path,
           reviewIdentity: resolved.reviewIdentity,
         });
-      });
+      };
+
+      const flushPendingRun = () => {
+        if (!pendingRun) {
+          return;
+        }
+        const { items } = pendingRun;
+        pushSupportBlock(
+          items.map((i) => i.block),
+          items[0].blockIndex,
+        );
+        pendingRun = null;
+      };
+
+      for (let blockIndex = 0; blockIndex < item.blocks.length; blockIndex++) {
+        const block = item.blocks[blockIndex];
+        if (block.type !== 'hunk') {
+          flushPendingRun();
+          continue;
+        }
+        const resolvedFile = resolveWalkthroughHunkFile(block.hunk, files);
+        if (resolvedFile) {
+          if (
+            pendingRun &&
+            pendingRun.filePath === resolvedFile.file.path &&
+            pendingRun.sectionId === resolvedFile.section.id
+          ) {
+            pendingRun.items.push({ block, blockIndex });
+          } else {
+            flushPendingRun();
+            pendingRun = {
+              filePath: resolvedFile.file.path,
+              items: [{ block, blockIndex }],
+              sectionId: resolvedFile.section.id,
+            };
+          }
+        } else {
+          flushPendingRun();
+        }
+      }
+      flushPendingRun();
     }
   }
 

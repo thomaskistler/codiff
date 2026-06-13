@@ -792,14 +792,10 @@ test('focusChangedFileForHunks renders only the matching hunk', () => {
   expect(focused!.fingerprint).not.toBe(file.fingerprint);
   expect(focused!.sections).toHaveLength(1);
   expect(focused!.sections[0].id).toBe(section.id);
-  expect(focused!.sections[0].newFile).toBeUndefined();
-  expect(focused!.sections[0].oldFile).toBeUndefined();
+  expect(focused!.sections[0].newFile).toBe(section.newFile);
+  expect(focused!.sections[0].oldFile).toBe(section.oldFile);
   expect(focused!.sections[0].patch).toContain('favorite.drag()');
   expect(focused!.sections[0].patch).not.toContain('database.commit_order()');
-
-  const parsed = parseSectionDiffWithOptions(focused!, focused!.sections[0], false);
-  expect(parsed.hunks).toHaveLength(1);
-  expect(parsed.hunks[0].additionStart).toBe(1);
 });
 
 test('focusChangedFileForHunks renders selected hunks in agent order', () => {

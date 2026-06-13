@@ -396,8 +396,6 @@ export const focusChangedFileForHunks = (
     sections: [
       {
         ...section,
-        newFile: undefined,
-        oldFile: undefined,
         patch: focusedPatch,
         summary: {
           ...section.summary,

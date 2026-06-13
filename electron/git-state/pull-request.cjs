@@ -650,7 +650,48 @@ const resolvePullRequestContentRefs = async (repoRoot, pullRequest, metadata) =>
   }
 
   const mergeBase = (await gitOrEmpty(repoRoot, ['merge-base', baseRef, headRef])).trim();
-  return mergeBase ? { base: mergeBase, head: headRef } : null;
+  if (!mergeBase) {
+    return null;
+  }
+
+  const localHeadSha = (
+    await gitOrEmpty(repoRoot, ['rev-parse', '--verify', '--quiet', headRef])
+  ).trim();
+
+  // When merge-base equals the PR head, the base branch has advanced past it —
+  // the PR was merged and the branch moved on. Both sides would otherwise read
+  // from the same commit, producing an empty diff. Find the merge commit that
+  // integrated the head so we can use its first parent (the pre-merge state of
+  // the base branch) as the correct diff base.
+  if (mergeBase === localHeadSha) {
+    // Search for a merge commit in baseRef..headRef range that lists headRef as
+    // one of its parents. %P emits the full list of parent SHAs.
+    const mergeLog = (
+      await gitOrEmpty(repoRoot, [
+        'log',
+        '--merges',
+        '--format=%H %P',
+        `${localHeadSha}..${baseRef}`,
+      ])
+    ).trim();
+    for (const line of mergeLog.split('\n')) {
+      const parts = line.trim().split(/\s+/);
+      const [, ...parents] = parts;
+      if (parents.includes(localHeadSha) && parents[0]) {
+        // First parent is the pre-merge tip of the base branch.
+        return { base: parents[0], head: headRef };
+      }
+    }
+    // Fallback for squash/rebase merges where no merge commit lists the PR head
+    // as a parent: use the PR head's own parent. This is exact for single-commit
+    // PRs and approximate for multi-commit squash PRs.
+    const headParent = (
+      await gitOrEmpty(repoRoot, ['rev-parse', '--verify', '--quiet', `${headRef}^1`])
+    ).trim();
+    return headParent ? { base: headParent, head: headRef } : null;
+  }
+
+  return { base: mergeBase, head: headRef };
 };
 
 /**
