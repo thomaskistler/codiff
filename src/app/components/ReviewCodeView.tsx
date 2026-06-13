@@ -1859,7 +1859,7 @@ export function ReviewCodeView({
         expandUnchanged: false,
         expansionLineCount: diffContextExpansionLineCount,
         hunkSeparators: 'line-info-basic',
-        itemMetrics: codeViewItemMetrics,
+        itemMetrics: { ...codeViewItemMetrics, lineHeight: diffLineHeight },
         layout: {
           ...codeViewLayout,
           paddingBottom: bottomInset,
@@ -1977,6 +1977,7 @@ export function ReviewCodeView({
       cancelPendingEmptyCommentDeletes,
       commitDetailsItemId,
       createCommentForRange,
+      diffLineHeight,
       diffStyle,
       itemMetadata,
       loadingSectionIds,
