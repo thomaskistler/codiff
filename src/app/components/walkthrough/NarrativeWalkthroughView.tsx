@@ -301,6 +301,30 @@ const createSupportBlocks = (
 
       for (let blockIndex = 0; blockIndex < item.blocks.length; blockIndex++) {
         const block = item.blocks[blockIndex];
+        if (block.type === 'markup') {
+          flushPendingRun();
+          const blockId = `walkthrough:support:${item.id}:${blockIndex}`;
+          const isFirstBlock = blocks.length === 0;
+          blocks.push({
+            header: isFirstBlock ? <SupportHeader current={selected} /> : null,
+            headerSelected: selected,
+            id: blockId,
+            markupContent: block.prose,
+          });
+          continue;
+        }
+        if (block.type === 'html') {
+          flushPendingRun();
+          const blockId = `walkthrough:support:${item.id}:${blockIndex}`;
+          const isFirstBlock = blocks.length === 0;
+          blocks.push({
+            header: isFirstBlock ? <SupportHeader current={selected} /> : null,
+            headerSelected: selected,
+            htmlContent: block.html,
+            id: blockId,
+          });
+          continue;
+        }
         if (block.type !== 'hunk') {
           flushPendingRun();
           continue;

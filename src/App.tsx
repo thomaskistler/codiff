@@ -571,7 +571,9 @@ export default function App() {
       setCollapsed(
         new Set(
           orderedState.files
-            .filter((file) => nextViewed[file.path] === file.fingerprint)
+            .filter(
+              (file) => nextViewed[file.path] === file.fingerprint || file.status === 'deleted',
+            )
             .map((file) => file.path),
         ),
       );
@@ -1279,7 +1281,9 @@ export default function App() {
             session?.collapsed ??
             new Set(
               orderedState.files
-                .filter((file) => nextViewed[file.path] === file.fingerprint)
+                .filter(
+                  (file) => nextViewed[file.path] === file.fingerprint || file.status === 'deleted',
+                )
                 .map((file) => file.path),
             );
 
@@ -1678,6 +1682,7 @@ export default function App() {
         const next = new Set(current);
         if (isCollapsed) {
           next.delete(reviewKey);
+          next.delete(file.path);
         } else {
           next.add(reviewKey);
         }

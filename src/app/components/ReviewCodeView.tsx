@@ -1535,7 +1535,9 @@ export function ReviewCodeView({
       const reviewIdentity = block.reviewIdentity ?? getReviewIdentity(file, reviewIdentityByPath);
       const reviewKey = reviewIdentity.key;
       const isViewed = isReviewIdentityViewed(viewed, reviewIdentity);
-      const isCollapsed = collapsed.has(reviewKey) && !forceExpandedPaths.has(file.path);
+      const isCollapsed =
+        (collapsed.has(reviewKey) || collapsed.has(file.path)) &&
+        !forceExpandedPaths.has(file.path);
       const visibleSections = getVisibleDiffSections(file, showWhitespace);
       const lineCount = getDiffLineCountFromVisibleSections(visibleSections);
       const sections = isCollapsed ? visibleSections.slice(0, 1) : visibleSections;
