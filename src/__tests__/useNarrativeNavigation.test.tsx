@@ -144,3 +144,54 @@ test('support navigation holds support mode until the support block is reached',
     await view.cleanup();
   }
 });
+
+// Regression: ReviewCodeView tracks one "last-handled scroll nonce" ref shared by
+// stop and support scrolls. If scrolling into support advanced a separate counter
+// (or left a stale one), the request would mismatch the handled stop nonce and
+// fire a spurious smooth-scroll back to the first support block. The scroll nonce
+// must only advance on explicit navigation, never on scroll-driven mode changes.
+test('scroll nonce advances only on explicit navigation, not on scroll-driven mode changes', async () => {
+  const navigationRef: { current: NarrativeNavigation | null } = { current: null };
+  const getNavigation = () => {
+    if (!navigationRef.current) {
+      throw new Error('Navigation did not render.');
+    }
+    return navigationRef.current;
+  };
+
+  const view = await renderReact(
+    <NavigationHarness onNavigation={(next) => (navigationRef.current = next)} />,
+  );
+
+  try {
+    expect(getNavigation().scrollTarget.nonce).toBe(0);
+
+    // Navigating forward through stops bumps the shared nonce.
+    await act(async () => {
+      getNavigation().goStop(2);
+    });
+    const afterStop = getNavigation().scrollTarget.nonce;
+    expect(afterStop).toBeGreaterThan(0);
+
+    // Scroll-driven syncs (including into support) must NOT bump the nonce, so the
+    // pending scroll request stays equal to the already-handled stop nonce.
+    await act(async () => {
+      getNavigation().syncIndexFromScroll(2);
+    });
+    expect(getNavigation().scrollTarget.nonce).toBe(afterStop);
+
+    await act(async () => {
+      getNavigation().syncSupportFromScroll();
+    });
+    expect(getNavigation().mode).toBe('support');
+    expect(getNavigation().scrollTarget.nonce).toBe(afterStop);
+
+    // Explicitly opening support DOES bump the nonce, so its scroll fires once.
+    await act(async () => {
+      getNavigation().openSupport();
+    });
+    expect(getNavigation().scrollTarget.nonce).toBeGreaterThan(afterStop);
+  } finally {
+    await view.cleanup();
+  }
+});

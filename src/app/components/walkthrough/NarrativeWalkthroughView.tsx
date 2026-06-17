@@ -625,7 +625,7 @@ export function NarrativeWalkthroughView({
       ? {
           behavior: 'smooth',
           blockId: firstSupportBlockId,
-          request: navigation.supportScrollRequest,
+          request: navigation.scrollTarget.nonce,
         }
       : navigation.mode === 'stop' && activeBlockId
         ? {

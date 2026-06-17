@@ -31,11 +31,16 @@ export const useNarrativeNavigation = (
   );
   const [mode, setMode] = useState<NarrativeViewMode>('stop');
   const [index, setIndex] = useState(0);
+  // A single monotonic nonce drives every programmatic scroll (stop and support
+  // alike). ReviewCodeView tracks the last-handled nonce in one ref, so stop and
+  // support scrolls must share this counter — otherwise a support request value
+  // can collide with an already-handled stop nonce (or vice versa) and fire a
+  // spurious scroll. Only explicit navigation (goStop/openSupport) bumps it;
+  // scroll-driven mode changes never do.
   const [scrollTarget, setScrollTarget] = useState<{ index: number; nonce: number }>({
     index: 0,
     nonce: 0,
   });
-  const [supportScrollRequest, setSupportScrollRequest] = useState(0);
   const [supportVisited, setSupportVisited] = useState(false);
   const [visited, setVisited] = useState<ReadonlySet<string>>(() => {
     const stopId = firstStopId(walkthrough);
@@ -77,7 +82,6 @@ export const useNarrativeNavigation = (
     setScrollTarget({ index: 0, nonce: 0 });
     pendingStopScrollIndexRef.current = null;
     pendingSupportScrollRef.current = false;
-    setSupportScrollRequest(0);
     setSupportVisited(false);
     const stopId = firstStopId(walkthrough);
     setVisited(new Set(stopId ? [stopId] : []));
@@ -201,7 +205,8 @@ export const useNarrativeNavigation = (
     }
     setMode('support');
     pendingSupportScrollRef.current = true;
-    setSupportScrollRequest((current) => current + 1);
+    // Bump the shared scroll nonce so the support scroll fires exactly once.
+    setScrollTarget((current) => ({ index: current.index, nonce: current.nonce + 1 }));
     setSupportVisited(true);
   }, [walkthroughView, leaveStopMode]);
 
@@ -259,7 +264,6 @@ export const useNarrativeNavigation = (
     scrollTarget,
     setCommitBody,
     setCommitSubject,
-    supportScrollRequest,
     supportVisited,
     syncIndexFromScroll,
     syncSupportFromScroll,
