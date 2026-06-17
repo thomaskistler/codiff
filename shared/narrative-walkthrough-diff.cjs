@@ -334,17 +334,27 @@ const filterPatchToHunkIds = (patch, sectionId, hunkIds) => {
     return null;
   }
 
-  const selectedHunkLines = [];
+  const selectedOrdinals = [];
   for (const hunkId of hunkIds) {
     const ordinal = getHunkOrdinal(sectionId, hunkId);
     if (ordinal == null) {
       return null;
     }
-    const lines = hunkLinesByOrdinal.get(ordinal);
-    if (!lines) {
+    if (!hunkLinesByOrdinal.has(ordinal)) {
       return null;
     }
-    selectedHunkLines.push(...lines);
+    selectedOrdinals.push(ordinal);
+  }
+
+  // Emit the selected hunks in file order (ascending ordinal). A unified diff must
+  // have monotonically increasing hunk ranges; if a walkthrough lists hunks out of
+  // file order (e.g. for narrative flow), an unsorted patch is malformed and the
+  // diff renderer mis-estimates its height, destabilizing the virtual scroll.
+  selectedOrdinals.sort((a, b) => a - b);
+
+  const selectedHunkLines = [];
+  for (const ordinal of selectedOrdinals) {
+    selectedHunkLines.push(...hunkLinesByOrdinal.get(ordinal));
   }
 
   if (selectedHunkLines.length === 0) {
@@ -355,8 +365,74 @@ const filterPatchToHunkIds = (patch, sectionId, hunkIds) => {
   return patch.endsWith('\n') && !focused.endsWith('\n') ? `${focused}\n` : focused;
 };
 
+/**
+ * Build synthetic old/new file contents that differ ONLY at the focused hunks.
+ *
+ * Non-focused changes are neutralized — reverted on the old side so both sides
+ * are identical there — so the diff renderer treats them as unchanged context
+ * (collapsed, expandable) instead of separate hunks. The focused hunks still
+ * render from full file contents, which keeps context expansion available and
+ * the new-side line numbers accurate (the new contents are returned verbatim).
+ *
+ * @param {string} patch the section's full unified diff
+ * @param {string} sectionId
+ * @param {ReadonlyArray<string>} hunkIds the focused hunk ids
+ * @param {string} oldContents full base file contents
+ * @param {string} newContents full head file contents
+ * @returns {{ oldContents: string, newContents: string } | null}
+ */
+const buildFocusedFileContents = (patch, sectionId, hunkIds, oldContents, newContents) => {
+  if (typeof patch !== 'string' || hunkIds.length === 0) {
+    return null;
+  }
+
+  const wantedOrdinals = new Set();
+  for (const hunkId of hunkIds) {
+    const ordinal = getHunkOrdinal(sectionId, hunkId);
+    if (ordinal == null) {
+      return null;
+    }
+    wantedOrdinals.add(ordinal);
+  }
+
+  const focusedHunks = [];
+  let ordinal = 0;
+  for (const line of patch.split('\n')) {
+    const header = parseHunkHeader(line);
+    if (!header) {
+      continue;
+    }
+    ordinal += 1;
+    if (wantedOrdinals.has(ordinal)) {
+      focusedHunks.push(header);
+    }
+  }
+  if (focusedHunks.length !== wantedOrdinals.size) {
+    return null;
+  }
+
+  const oldLines = oldContents.split('\n');
+  const result = newContents.split('\n');
+
+  // Splice in descending new-side order so earlier edits don't shift the indices
+  // of later ones. Each focused hunk's new-side range is reverted to its old-side
+  // lines, leaving every non-focused region identical on both sides.
+  focusedHunks.sort((a, b) => b.additionStart - a.additionStart);
+  for (const hunk of focusedHunks) {
+    const spliceStart = hunk.additionCount === 0 ? hunk.additionStart : hunk.additionStart - 1;
+    const oldSegment =
+      hunk.deletionCount === 0
+        ? []
+        : oldLines.slice(hunk.deletionStart - 1, hunk.deletionStart - 1 + hunk.deletionCount);
+    result.splice(spliceStart, hunk.additionCount, ...oldSegment);
+  }
+
+  return { newContents, oldContents: result.join('\n') };
+};
+
 module.exports = {
   buildAnchorDisplay,
+  buildFocusedFileContents,
   extractPatchHunks,
   filterPatchToHunkIds,
   getSectionWalkthroughHunks,

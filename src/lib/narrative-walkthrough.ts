@@ -1,4 +1,5 @@
 import {
+  buildFocusedFileContents,
   filterPatchToHunkIds,
   getSectionWalkthroughHunks,
   isSyntheticWalkthroughHunk,
@@ -389,6 +390,48 @@ export const focusChangedFileForHunks = (
   }
 
   const signature = focusSignature(section, hunkIds);
+  const focusedSummary = {
+    ...section.summary,
+    fingerprint: signature,
+    reason: section.summary?.reason ?? 'Focused walkthrough hunk.',
+  };
+
+  // When the section carries full base/head contents (the pull-request path),
+  // render the focused hunks from synthetic contents that differ only at those
+  // hunks. The diff renderer (`parseSectionDiffWithOptions` in `diff.ts`) then
+  // recomputes the full-file diff — so context stays expandable and the new-side
+  // line numbers stay accurate — while every non-focused change collapses into
+  // unchanged context. Falling back to the focused patch alone (below) drops the
+  // contents, which disables expansion, so only do that when contents are absent.
+  if (section.oldFile && section.newFile) {
+    const focusedContents = buildFocusedFileContents(
+      section.patch,
+      section.id,
+      hunkIds,
+      section.oldFile.contents,
+      section.newFile.contents,
+    );
+    if (focusedContents) {
+      return {
+        ...file,
+        fingerprint: `${file.fingerprint}:${signature}`,
+        sections: [
+          {
+            ...section,
+            // New contents are unchanged, so the head-side highlight cache is
+            // reused; only the synthetic base side needs a distinct cache key.
+            oldFile: {
+              ...section.oldFile,
+              cacheKey: `${section.oldFile.cacheKey ?? ''}:focus:${signature}`,
+              contents: focusedContents.oldContents,
+            },
+            patch: focusedPatch,
+            summary: focusedSummary,
+          },
+        ],
+      };
+    }
+  }
 
   return {
     ...file,
@@ -396,12 +439,12 @@ export const focusChangedFileForHunks = (
     sections: [
       {
         ...section,
+        // No full contents available (local patch-only diffs): render the focused
+        // patch directly. Expansion is unavailable for patch-derived diffs.
+        newFile: undefined,
+        oldFile: undefined,
         patch: focusedPatch,
-        summary: {
-          ...section.summary,
-          fingerprint: signature,
-          reason: section.summary?.reason ?? 'Focused walkthrough hunk.',
-        },
+        summary: focusedSummary,
       },
     ],
   };

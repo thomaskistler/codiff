@@ -792,15 +792,28 @@ test('focusChangedFileForHunks renders only the matching hunk', () => {
   expect(focused!.fingerprint).not.toBe(file.fingerprint);
   expect(focused!.sections).toHaveLength(1);
   expect(focused!.sections[0].id).toBe(section.id);
+  // Full contents are kept (so context stays expandable) but the base side is
+  // synthesized so non-focused changes collapse to unchanged context. The head
+  // side is reused verbatim; only the base side is rewritten with a fresh cache key.
   expect(focused!.sections[0].newFile).toBe(section.newFile);
-  expect(focused!.sections[0].oldFile).toBe(section.oldFile);
+  expect(focused!.sections[0].oldFile).toBeDefined();
+  expect(focused!.sections[0].oldFile).not.toBe(section.oldFile);
+  expect(focused!.sections[0].oldFile!.cacheKey).toContain(':focus:');
   expect(focused!.sections[0].patch).toContain('favorite.drag()');
   expect(focused!.sections[0].patch).not.toContain('database.commit_order()');
+  // The synthetic base reverts only the focused hunk, so the recomputed diff shows
+  // exactly that hunk — the other change (commit_order) collapses to context.
+  const rendered = parseSectionDiffWithOptions(focused!, focused!.sections[0], false);
+  expect(rendered.hunks).toHaveLength(1);
+  expect(rendered.isPartial).toBe(false);
 });
 
-test('focusChangedFileForHunks renders selected hunks in agent order', () => {
+test('focusChangedFileForHunks renders selected hunks in file order regardless of authored order', () => {
   const file = multiHunkFile();
   const section = file.sections[0];
+  // Authored out of file order (h3 before h1). A unified diff requires ascending
+  // hunk ranges, so the focused patch must reorder them to h1 then h3 — otherwise
+  // the diff renderer mis-estimates the panel height and the virtual scroll snaps.
   const focused = focusChangedFileForHunks(file, section, [
     hunk({
       added: 1,
@@ -826,8 +839,9 @@ test('focusChangedFileForHunks renders selected hunks in agent order', () => {
   expect(focused!.sections[0].patch).toContain('database.commit_order()');
   expect(focused!.sections[0].patch).toContain('favorite.drag()');
   expect(focused!.sections[0].patch).not.toContain('favorite.row_count()');
-  expect(focused!.sections[0].patch.indexOf('database.commit_order()')).toBeLessThan(
-    focused!.sections[0].patch.indexOf('favorite.drag()'),
+  // h1 (favorite.drag, line 2) must precede h3 (database.commit_order, line 12).
+  expect(focused!.sections[0].patch.indexOf('favorite.drag()')).toBeLessThan(
+    focused!.sections[0].patch.indexOf('database.commit_order()'),
   );
   expect(parseSectionDiffWithOptions(focused!, focused!.sections[0], false).hunks).toHaveLength(2);
 });
